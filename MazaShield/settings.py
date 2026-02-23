@@ -16,9 +16,12 @@ load_dotenv()
 # =====================
 # SECURITY
 # =====================
+print("ENV CHECK:", os.environ)
+
 _raw_secret = os.getenv("SECRET_KEY")
+
 if _raw_secret:
-    # strip surrounding quotes if someone saved the value with quotes in .env or platform UI
+    # strip surrounding quotes if accidentally saved with quotes
     SECRET_KEY = _raw_secret.strip("\"'\n ")
 else:
     SECRET_KEY = None
