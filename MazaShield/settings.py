@@ -9,24 +9,33 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
+# Tambahkan di bagian atas setelah load_dotenv()
+print("=" * 50)
+print("DEBUG ENV VARIABLES:")
+print(f"SECRET_KEY exists: {bool(os.getenv('SECRET_KEY'))}")
+print(f"DEBUG value: {os.getenv('DEBUG')}")
+print(f"ALLOWED_HOSTS: {os.getenv('ALLOWED_HOSTS')}")
+print(f"CORS_ALLOWED_ORIGINS: {os.getenv('CORS_ALLOWED_ORIGINS')}")
+print(f"DATABASE_URL exists: {bool(os.getenv('DATABASE_URL'))}")
+print("=" * 50)
 
 # =====================
 # SECURITY
 # =====================
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv("SECRET_KEY")
 
-DEBUG = os.getenv('DEBUG', 'False').lower() in ('1', 'true', 'yes')
+DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
 
-DEFAULT_ALLOWED = 'localhost,127.0.0.1'
+DEFAULT_ALLOWED = "localhost,127.0.0.1"
 
 if not SECRET_KEY:
-  if DEBUG:
-       SECRET_KEY = 'django-insecure-dev-fallback-please-change'
-  else:
-    from django.core.exceptions import ImproperlyConfigured
-    raise ImproperlyConfigured("The SECRET_KEY setting must not be empty in production.")
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-fallback-please-change"
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured("The SECRET_KEY setting must not be empty in production.")
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', DEFAULT_ALLOWED).split(',') if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", DEFAULT_ALLOWED).split(",") if h.strip()]
 
 # =====================
 # APPLICATIONS
