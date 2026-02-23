@@ -18,6 +18,14 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
 DEFAULT_ALLOWED = 'localhost,127.0.0.1'
+
+if not SECRET_KEY:
+  if DEBUG:
+       SECRET_KEY = 'django-insecure-dev-fallback-please-change'
+  else:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("The SECRET_KEY setting must not be empty in production.")
+
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', DEFAULT_ALLOWED).split(',') if h.strip()]
 
 # =====================
