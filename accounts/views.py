@@ -57,3 +57,47 @@ class LoginView(APIView):
             'role': user.role,
             'nama': user.nama,
         }, status=status.HTTP_200_OK)
+
+
+# ─── PBI-5: Edit Profile ──────────────────────────────────────────────────────
+class ProfileView(APIView):
+    permission_classes = [IsActiveUser]
+
+    def get(self, request):
+        serializer = ProfileSerializer(request.user)
+        return Response(serializer.data)
+
+    def put(self, request):
+        serializer = ProfileSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'message': 'Profil berhasil diperbarui', 'data': serializer.data})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+# ─── PBI-4 + PBI-7: Admin User Management ────────────────────────────────────
+class AdminUserListView(generics.ListAPIView):
+    permission_classes = [IsMarketingOrSuperAdmin]
+    serializer_class = UserListSerializer
+
+    def get_queryset(self):
+        return User.objects.all().order_by('-created_at')
+
+
+# ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
+class AdminUserDeleteView(APIView):
+    permission_classes = [IsMarketingOrSuperAdmin]
+
+    def delete(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({'error': 'User tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.pk == request.user.pk:
+            return Response(
+                {'error': 'Anda tidak dapat menghapus akun Anda sendiri'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.soft_delete()
+        return Response({'message': 'User berhasil dihapus/nonaktifkan'}, status=status.HTTP_200_OK)

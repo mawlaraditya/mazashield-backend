@@ -44,4 +44,48 @@ class LoginSerializer(serializers.Serializer):
         user.save(update_fields=['last_login'])
         data['user'] = user
         return data
+    
 
+# ─── PBI-5: Edit Profile ──────────────────────────────────────────────────────
+class ProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(read_only=True)
+    role = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['nama', 'nomor_telepon', 'email', 'role']
+
+    def update(self, instance, validated_data):
+        instance.nama = validated_data.get('nama', instance.nama)
+        instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
+        instance.updated_at = timezone.now()
+        instance.save(update_fields=['nama', 'nomor_telepon', 'updated_at'])
+        return instance
+    
+# ─── User List (for admin) ────────────────────────────────────────────────────
+class UserListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'nama', 'nomor_telepon', 'email', 'role', 'is_active', 'created_at']
+
+
+# ─── Admin Edit User (for admin) ──────────────────────────────────────────────
+class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['nama', 'nomor_telepon', 'role', 'is_active']
+
+    def update(self, instance, validated_data):
+        new_active_status = validated_data.get('is_active', instance.is_active)
+        
+        # If reactivating, clear deleted_at
+        if new_active_status and not instance.is_active:
+            instance.deleted_at = None
+            
+        instance.nama = validated_data.get('nama', instance.nama)
+        instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
+        instance.role = validated_data.get('role', instance.role)
+        instance.is_active = new_active_status
+        instance.updated_at = timezone.now()
+        instance.save()
+        return instance
