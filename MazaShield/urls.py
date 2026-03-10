@@ -10,6 +10,10 @@ urlpatterns = [
     path('api/auth/', include('accounts.urls.auth_urls')),
     path('api/', include('accounts.urls.profile_urls')),
     path('api/admin/', include('accounts.urls.admin_urls')),
+
+    # ── Catalogs & Sales ──────────────────────────────────────────────────────
+    path('api/sales/', include('catalogs.urls.internal_urls')),
+    path('api/catalogs/', include('catalogs.urls.public_urls')),
 ]
 
 if settings.DEBUG:

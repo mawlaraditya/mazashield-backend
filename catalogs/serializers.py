@@ -13,7 +13,7 @@ class TernakCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ternak
         fields = [
-            'id_ternak', 'nama', 'berat', 'tanggal_penimbangan', 'berat_target', 'umur', 'harga',
+            'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 'tanggal_lahir', 'harga',
             'deskripsi', 'foto', 'status_ternak',
         ]
 
@@ -32,11 +32,6 @@ class TernakCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Berat target harus lebih dari 0')
         return value
 
-    def validate_umur(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Umur harus lebih dari 0')
-        return value
-
     def validate_harga(self, value):
         if value <= 0:
             raise serializers.ValidationError('Harga harus lebih dari 0')
@@ -48,7 +43,7 @@ class TernakUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ternak
-        fields = ['nama', 'berat', 'tanggal_penimbangan', 'berat_target', 'umur', 'harga', 'deskripsi', 'foto', 'status_ternak']
+        fields = ['nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak']
 
     def validate_berat(self, value):
         if value <= 0:
@@ -70,21 +65,14 @@ class TernakUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Harga harus lebih dari 0')
         return value
 
-    # def update(self, instance, validated_data): # TODO: sepertinya ini tidak perlu
-    #     for attr, val in validated_data.items():
-    #         setattr(instance, attr, val)
-    #     instance.updated_at = timezone.now()
-        # instance.save()
-    #     return instance 
-
-
 class TernakSerializer(serializers.ModelSerializer):
     """PBI-11 & PBI-12: Read Katalog Mazdafarm"""
+    umur = serializers.ReadOnlyField()
 
     class Meta:
         model = Ternak
         fields = [
-            'id', 'id_ternak', 'nama', 'berat', 'tanggal_penimbangan', 'umur', 'harga',
+            'id', 'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 'tanggal_lahir', 'umur', 'harga',
             'deskripsi', 'foto', 'status_ternak', 'created_at', 'updated_at',
         ]
 
