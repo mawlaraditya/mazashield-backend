@@ -57,6 +57,20 @@ class LoginView(APIView):
             'role': user.role,
             'nama': user.nama,
         }, status=status.HTTP_200_OK)
+    
+# ─── PBI-3: Logout ────────────────────────────────────────────────────────────
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get('refresh')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
+        except TokenError:
+            return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
 
 
 # ─── PBI-5: Edit Profile ──────────────────────────────────────────────────────
@@ -101,3 +115,42 @@ class AdminUserDeleteView(APIView):
 
         user.soft_delete()
         return Response({'message': 'User berhasil dihapus/nonaktifkan'}, status=status.HTTP_200_OK)
+    
+# ─── Export Users to CSV ──────────────────────────────────────────────
+class AdminUserExportView(APIView):
+    permission_classes = [IsMarketingOrSuperAdmin]
+
+    def get(self, request):
+        export_type = request.query_params.get('type', 'external')
+        
+        if export_type == 'internal':
+            roles = ['SuperAdmin', 'Marketing', 'Finance', 'CEO', 'Komisaris']
+            filename = f"akun_internal_{timezone.now().strftime('%Y%m%d')}.csv"
+        else:
+            roles = ['Customer', 'Investor']
+            filename = f"akun_external_{timezone.now().strftime('%Y%m%d')}.csv"
+
+        users = User.objects.filter(role__in=roles).order_by('-created_at')
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        writer = csv.writer(response)
+        # Header
+        writer.writerow(['ID', 'Nama', 'Email', 'Nomor Telepon', 'Role', 'Status', 'Tanggal Dibuat'])
+        
+        # Data
+        for user in users:
+            status = 'Aktif' if user.is_active else 'Nonaktif'
+            created_at = user.created_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M:%S')
+            writer.writerow([
+                user.id, 
+                user.nama, 
+                user.email, 
+                user.nomor_telepon, 
+                user.role, 
+                status, 
+                created_at
+            ])
+            
+        return response
