@@ -62,11 +62,11 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
         if value not in VALID_ROLES:
             raise serializers.ValidationError(f'Role tidak valid. Pilihan: {VALID_ROLES}')
         
-        # 1. Marketing can ONLY create Customer
-        if request_user.role == 'Marketing' and value != 'Customer':
-            raise serializers.ValidationError('Marketing hanya dapat membuat akun Customer')
+        # Marketing only allowed to create external users
+        if request_user.role == 'Marketing' and value not in ['Customer', 'Investor']:
+            raise serializers.ValidationError('Marketing hanya diperbolehkan membuat akun Customer atau Investor')
         
-        # 2. CEO dan Komisaris itu 1 orang (mencegah duplikasi peran jika sudah ada)
+        # CEO dan Komisaris itu 1 orang (mencegah duplikasi peran jika sudah ada)
         if value in ['CEO', 'Komisaris']:
             if User.objects.filter(role__in=['CEO', 'Komisaris']).exists():
                 raise serializers.ValidationError('Role CEO/Komisaris sudah ada (hanya boleh ada 1 person)')
@@ -74,7 +74,7 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
         return value
 
     def validate_email(self, value):
-        if User.objects.filter(email=value, deleted_at__isnull=True).exists():
+        if User.objects.filter(email=value).exists(): # No filter on deleted_at to avoid conflicts with deleted accounts
             raise serializers.ValidationError('Email sudah terdaftar')
         return value
 
@@ -137,19 +137,63 @@ class UserListSerializer(serializers.ModelSerializer):
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['nama', 'nomor_telepon', 'role', 'is_active']
+        fields = ['nama', 'nomor_telepon', 'role'] # Removed 'is_active' as reactivation is not allowed
 
     def update(self, instance, validated_data):
-        new_active_status = validated_data.get('is_active', instance.is_active)
-        
-        # If reactivating, clear deleted_at
-        if new_active_status and not instance.is_active:
-            instance.deleted_at = None
-            
+        # If user is already soft-deleted, prevent any updates
+        if instance.deleted_at is not None or not instance.is_active:
+             raise serializers.ValidationError({'detail': 'Akun ini sudah dinonaktifkan/dihapus dan tidak bisa diedit.'})
+
         instance.nama = validated_data.get('nama', instance.nama)
         instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
         instance.role = validated_data.get('role', instance.role)
-        instance.is_active = new_active_status
         instance.updated_at = timezone.now()
         instance.save()
         return instance
+
+
+# ─── PBI-XP: Forgot & Reset Password (OTP) ────────────────────────────────────
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value, deleted_at__isnull=True).exists():
+            raise serializers.ValidationError('Email tidak ditemukan')
+        return value
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, data):
+        from .models import ResetPasswordOTP
+        
+        # Cek apakah Token valid
+        otp_record = ResetPasswordOTP.objects.filter(
+            user__email=data['email'], 
+            otp=data['token'], 
+            is_used=False
+        ).last()
+
+        if not otp_record or not otp_record.is_valid():
+            raise serializers.ValidationError('Link reset password tidak valid atau sudah kadaluarsa')
+        
+        data['user'] = otp_record.user
+        data['otp_record'] = otp_record
+        return data
+
+    def save(self):
+        user = self.validated_data['user']
+        otp_record = self.validated_data['otp_record']
+        
+        # Update Password
+        user.set_password(self.validated_data['new_password'])
+        user.save()
+        
+        # Tandai OTP sudah dipakai
+        otp_record.is_used = True
+        otp_record.save()
+        
+        return user
