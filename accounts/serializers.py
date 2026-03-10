@@ -46,6 +46,48 @@ class LoginSerializer(serializers.Serializer):
         return data
     
 
+
+# ─── PBI-4: Register by Admin ─────────────────────────────────────────────────
+VALID_ROLES = [r[0] for r in User.ROLE_CHOICES]
+
+class AdminRegisterSerializer(serializers.ModelSerializer):
+    generated_password = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['nama', 'nomor_telepon', 'email', 'role', 'generated_password']
+
+    def validate_role(self, value):
+        request_user = self.context.get('request').user
+        if value not in VALID_ROLES:
+            raise serializers.ValidationError(f'Role tidak valid. Pilihan: {VALID_ROLES}')
+        
+        # 1. Marketing can ONLY create Customer
+        if request_user.role == 'Marketing' and value != 'Customer':
+            raise serializers.ValidationError('Marketing hanya dapat membuat akun Customer')
+        
+        # 2. CEO dan Komisaris itu 1 orang (mencegah duplikasi peran jika sudah ada)
+        if value in ['CEO', 'Komisaris']:
+            if User.objects.filter(role__in=['CEO', 'Komisaris']).exists():
+                raise serializers.ValidationError('Role CEO/Komisaris sudah ada (hanya boleh ada 1 person)')
+        
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value, deleted_at__isnull=True).exists():
+            raise serializers.ValidationError('Email sudah terdaftar')
+        return value
+
+    def create(self, validated_data):
+        # Generate random password
+        random_pwd = get_random_string(length=12)
+        validated_data['password'] = random_pwd
+        user = User.objects.create_user(**validated_data)
+        # Store for display in response
+        user.generated_password = random_pwd
+        return user
+
+
 # ─── PBI-5: Edit Profile ──────────────────────────────────────────────────────
 class ProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(read_only=True)
@@ -61,7 +103,29 @@ class ProfileSerializer(serializers.ModelSerializer):
         instance.updated_at = timezone.now()
         instance.save(update_fields=['nama', 'nomor_telepon', 'updated_at'])
         return instance
-    
+
+
+# ─── PBI-6: Change Password ───────────────────────────────────────────────────
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, data):
+        user = self.context['request'].user
+        if not user.check_password(data['old_password']):
+            raise serializers.ValidationError({'old_password': 'Password lama salah'})
+        if data['old_password'] == data['new_password']:
+            raise serializers.ValidationError({'new_password': 'Password baru tidak boleh sama dengan password lama'})
+        return data
+
+    def save(self):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.updated_at = timezone.now()
+        user.save(update_fields=['password', 'updated_at'])
+        return user
+
+
 # ─── User List (for admin) ────────────────────────────────────────────────────
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
