@@ -5,11 +5,11 @@ from rest_framework.permissions import AllowAny
 # from django.utils import timezone
 
 from accounts.permissions import IsMarketingOrSuperAdmin
-from .models import Ternak, Daging, Invest
+from .models import Ternak # , Daging, Invest
 from .serializers import (
     TernakCreateSerializer, TernakUpdateSerializer, TernakSerializer,
 )
-from .filters import TernakFilter, DagingFilter, InvestFilter
+# from .filters import TernakFilter
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -22,7 +22,7 @@ class TernakInternalListCreateView(generics.ListCreateAPIView):
     PBI-11 GET    /api/sales/mazdafarm  → Read Internal
     """
     permission_classes = [IsMarketingOrSuperAdmin]
-    filterset_class = TernakFilter
+    # filterset_class = TernakFilter
 
     def get_queryset(self):
         return Ternak.objects.filter(deleted_at__isnull=True)
@@ -37,7 +37,7 @@ class TernakInternalListCreateView(generics.ListCreateAPIView):
         if serializer.is_valid():
             obj = serializer.save()
             return Response(
-                TernakSerializer(obj).data,
+                TernakSerializer(obj, context={'request': request}).data,
                 status=status.HTTP_201_CREATED
             )
         errors = serializer.errors
@@ -66,7 +66,7 @@ class TernakInternalDetailView(APIView):
         serializer = TernakUpdateSerializer(obj, data=request.data, partial=True)
         if serializer.is_valid():
             updated = serializer.save()
-            return Response(TernakSerializer(updated).data)
+            return Response(TernakSerializer(updated, context={'request': request}).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk):
