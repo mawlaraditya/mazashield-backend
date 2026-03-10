@@ -5,14 +5,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 import csv
+import os
 from django.http import HttpResponse
 from django.utils import timezone
 
-from .models import User
+from django.core.mail import send_mail
+from django.conf import settings
+
+from .models import User, ResetPasswordOTP
 from .serializers import (
     RegisterSerializer, LoginSerializer, AdminRegisterSerializer,
     ProfileSerializer, ChangePasswordSerializer, UserListSerializer,
-    AdminUserUpdateSerializer,
+    AdminUserUpdateSerializer, ForgotPasswordSerializer, ResetPasswordSerializer,
 )
 from .permissions import IsSuperAdmin, IsMarketingOrSuperAdmin, IsActiveUser
 
@@ -134,7 +138,7 @@ class AdminUserListView(generics.ListAPIView):
 
 # ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
 class AdminUserDeleteView(APIView):
-    permission_classes = [IsMarketingOrSuperAdmin]
+    permission_classes = [IsSuperAdmin]
 
     def delete(self, request, pk):
         try:
@@ -165,6 +169,10 @@ class AdminUserUpdateView(APIView):
             return Response({'error': 'User tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, pk):
+        # Marketing only allowed to view (GET), but not update (PUT)
+        if request.user.role != 'SuperAdmin':
+            return Response({'error': 'Hanya SuperAdmin yang dapat mengedit user'}, status=status.HTTP_403_FORBIDDEN)
+            
         try:
             user = User.objects.get(pk=pk)
             serializer = AdminUserUpdateSerializer(user, data=request.data, partial=True)
@@ -178,7 +186,7 @@ class AdminUserUpdateView(APIView):
 
 # ─── PBI-XX: Export Users to CSV ──────────────────────────────────────────────
 class AdminUserExportView(APIView):
-    permission_classes = [IsMarketingOrSuperAdmin]
+    permission_classes = [IsSuperAdmin]
 
     def get(self, request):
         export_type = request.query_params.get('type', 'external')
@@ -214,3 +222,73 @@ class AdminUserExportView(APIView):
             ])
             
         return response
+
+
+import threading
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+
+# ─── PBI-XP: Forgot & Reset Password (Token via Email) ────────────────────────
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            user = User.objects.get(email=email)
+            
+            # 1. Generate Secure Token
+            import secrets
+            reset_token = secrets.token_urlsafe(32)
+            
+            # 2. Simpan ke database
+            ResetPasswordOTP.objects.create(user=user, otp=reset_token)
+            
+            # 3. Create Direct Reset Link
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+            reset_link = f"{frontend_url}/forgot-password?token={reset_token}&email={email}"
+            
+            # 4. Kirim Email di Background
+            def send_reset_email():
+                subject = 'MazaShield - Permintaan Reset Password'
+                
+                context = {
+                    'nama': user.nama,
+                    'reset_link': reset_link,
+                }
+                
+                html_content = render_to_string('accounts/email/reset_password_email.html', context)
+                text_content = strip_tags(html_content)
+                
+                try:
+                    send_mail(
+                        subject, 
+                        text_content, 
+                        settings.EMAIL_HOST_USER, 
+                        [email], 
+                        html_message=html_content,
+                        fail_silently=False
+                    )
+                    print(f"SUCCESS: Reset email sent to {email}")
+                except Exception as e:
+                    print(f"EMAIL ERROR: {e}")
+
+            threading.Thread(target=send_reset_email).start()
+            
+            return Response({
+                'message': 'Link reset password telah dikirim ke email Anda'
+            }, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'message': 'Password berhasil diperbarui. Silakan login kembali.'}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
