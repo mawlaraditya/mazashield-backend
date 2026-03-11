@@ -61,6 +61,20 @@ class LoginView(APIView):
             'role': user.role,
             'nama': user.nama,
         }, status=status.HTTP_200_OK)
+    
+# ─── PBI-3: Logout ────────────────────────────────────────────────────────────
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get('refresh')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
+        except TokenError:
+            return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
 
 
 # ─── PBI-3: Logout ────────────────────────────────────────────────────────────

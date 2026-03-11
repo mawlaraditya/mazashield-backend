@@ -76,3 +76,67 @@ class TernakInternalDetailView(APIView):
         obj.soft_delete()
         return Response({'message': 'Ternak berhasil dihapus'}, status=status.HTTP_200_OK)
 
+# ══════════════════════════════════════════════════════════════════
+#  MAZDAGING — Internal (PBI 13, 14, 15, 16)
+# ══════════════════════════════════════════════════════════════════
+
+class DagingInternalListCreateView(generics.ListCreateAPIView):
+    """
+    PBI-13 POST /api/sales/mazdaging → Create Katalog Mazdaging
+    PBI-16 GET  /api/sales/mazdaging → Read Internal (with Filter & Pagination)
+    """
+    permission_classes = [IsMarketingOrSuperAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = DagingFilter
+
+    def get_queryset(self):
+        return Daging.objects.filter(deleted_at__isnull=True)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return DagingCreateSerializer
+        return DagingSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = DagingCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            obj = serializer.save()
+            return Response(
+                DagingSerializer(obj, context={'request': request}).data,
+                status=status.HTTP_201_CREATED
+            )
+        errors = serializer.errors
+        if 'id_daging' in errors and any('sudah' in str(e) for e in errors['id_daging']):
+            return Response(errors, status=status.HTTP_409_CONFLICT)
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DagingInternalDetailView(APIView):
+    """
+    PBI-14 PUT    /api/sales/mazdaging/<id> → Update
+    PBI-15 DELETE /api/sales/mazdaging/<id> → Soft Delete
+    """
+    permission_classes = [IsMarketingOrSuperAdmin]
+
+    def get_object(self, pk):
+        try:
+            return Daging.objects.get(pk=pk, deleted_at__isnull=True)
+        except Daging.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        obj = self.get_object(pk)
+        if not obj:
+            return Response({'error': 'Daging tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = DagingUpdateSerializer(obj, data=request.data, partial=True)
+        if serializer.is_valid():
+            updated = serializer.save()
+            return Response(DagingSerializer(updated, context={'request': request}).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        obj = self.get_object(pk)
+        if not obj:
+            return Response({'error': 'Daging tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+        obj.soft_delete()
+        return Response({'message': 'Daging berhasil dihapus'}, status=status.HTTP_200_OK)
