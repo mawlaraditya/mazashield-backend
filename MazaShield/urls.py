@@ -13,7 +13,7 @@ urlpatterns = [
 
     # ── Catalogs & Sales ──────────────────────────────────────────────────────
     path('api/sales/', include('catalogs.urls.internal_urls')),
-    path('api/catalogs/', include('catalogs.urls.public_urls')),
+    path('api/', include('catalogs.urls.public_urls')),
 ]
 
 if settings.DEBUG:

@@ -1,15 +1,18 @@
+
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 # from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsMarketingOrSuperAdmin
-from .models import Ternak # , Daging, Invest
+from .models import Ternak , Daging
 from .serializers import (
     TernakCreateSerializer, TernakUpdateSerializer, TernakSerializer,
+    DagingCreateSerializer, DagingUpdateSerializer, DagingSerializer
 )
-# from .filters import TernakFilter
+from .filters import TernakFilter, DagingFilter
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -140,3 +143,32 @@ class DagingInternalDetailView(APIView):
             return Response({'error': 'Daging tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
         obj.soft_delete()
         return Response({'message': 'Daging berhasil dihapus'}, status=status.HTTP_200_OK)
+    
+# ══════════════════════════════════════════════════════════════════
+#  PUBLIC — External (PBI 12, 17)
+# ══════════════════════════════════════════════════════════════════
+
+class TernakPublicListView(generics.ListAPIView):
+    """
+    PBI-12 GET /api/mazdafarm → Read External (Public)
+    """
+    permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend]
+    serializer_class = TernakSerializer
+    filterset_class = TernakFilter
+
+    def get_queryset(self):
+        return Ternak.objects.filter(deleted_at__isnull=True)
+
+
+class DagingPublicListView(generics.ListAPIView):
+    """
+    PBI-17 GET /api/mazdaging → Read External (Public)
+    """
+    permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend]
+    serializer_class = DagingSerializer
+    filterset_class = DagingFilter
+
+    def get_queryset(self):
+        return Daging.objects.filter(deleted_at__isnull=True)
