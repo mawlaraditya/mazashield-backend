@@ -4,8 +4,7 @@ from django.utils import timezone
 from django.utils.crypto import get_random_string
 from .models import User
 
-
-# ─── PBI-1: Register Customer ─────────────────────────────────────────────────
+# Register Customer
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
 
@@ -14,7 +13,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['nama', 'nomor_telepon', 'email', 'password']
 
     def validate_email(self, value):
-        if User.objects.filter(email=value, deleted_at__isnull=True).exists():
+        if User.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
             raise serializers.ValidationError('Email sudah terdaftar')
         return value
 
@@ -27,8 +26,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             role='Customer',
         )
 
-
-# ─── PBI-2: Login ─────────────────────────────────────────────────────────────
+# Login
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
@@ -39,15 +37,13 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError('Email atau password salah', code='unauthorized')
         if not user.is_active or user.deleted_at is not None:
             raise serializers.ValidationError('Akun tidak aktif', code='forbidden')
-        # Update last_login
+        
         user.last_login = timezone.now()
         user.save(update_fields=['last_login'])
         data['user'] = user
         return data
-    
 
-
-# ─── PBI-4: Register by Admin ─────────────────────────────────────────────────
+# Register by Admin
 VALID_ROLES = [r[0] for r in User.ROLE_CHOICES]
 
 class AdminRegisterSerializer(serializers.ModelSerializer):
@@ -62,33 +58,28 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
         if value not in VALID_ROLES:
             raise serializers.ValidationError(f'Role tidak valid. Pilihan: {VALID_ROLES}')
         
-        # Marketing only allowed to create external users
         if request_user.role == 'Marketing' and value not in ['Customer', 'Investor']:
             raise serializers.ValidationError('Marketing hanya diperbolehkan membuat akun Customer atau Investor')
         
-        # CEO dan Komisaris itu 1 orang (mencegah duplikasi peran jika sudah ada)
         if value in ['CEO', 'Komisaris']:
             if User.objects.filter(role__in=['CEO', 'Komisaris']).exists():
-                raise serializers.ValidationError('Role CEO/Komisaris sudah ada (hanya boleh ada 1 person)')
+                raise serializers.ValidationError('Role CEO/Komisaris sudah ada')
         
         return value
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists(): # No filter on deleted_at to avoid conflicts with deleted accounts
+        if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError('Email sudah terdaftar')
         return value
 
     def create(self, validated_data):
-        # Generate random password
         random_pwd = get_random_string(length=12)
         validated_data['password'] = random_pwd
         user = User.objects.create_user(**validated_data)
-        # Store for display in response
         user.generated_password = random_pwd
         return user
 
-
-# ─── PBI-5: Edit Profile ──────────────────────────────────────────────────────
+# Profile
 class ProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(read_only=True)
     role = serializers.CharField(read_only=True)
@@ -104,8 +95,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         instance.save(update_fields=['nama', 'nomor_telepon', 'updated_at'])
         return instance
 
-
-# ─── PBI-6: Change Password ───────────────────────────────────────────────────
+# Change Password
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True, min_length=8)
@@ -125,24 +115,20 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.save(update_fields=['password', 'updated_at'])
         return user
 
-
-# ─── User List (for admin) ────────────────────────────────────────────────────
+# Admin User Management
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'nama', 'nomor_telepon', 'email', 'role', 'is_active', 'created_at']
 
-
-# ─── Admin Edit User (for admin) ──────────────────────────────────────────────
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['nama', 'nomor_telepon', 'role'] # Removed 'is_active' as reactivation is not allowed
+        fields = ['nama', 'nomor_telepon', 'role']
 
     def update(self, instance, validated_data):
-        # If user is already soft-deleted, prevent any updates
         if instance.deleted_at is not None or not instance.is_active:
-             raise serializers.ValidationError({'detail': 'Akun ini sudah dinonaktifkan/dihapus dan tidak bisa diedit.'})
+             raise serializers.ValidationError({'detail': 'Akun ini sudah dinonaktifkan.'})
 
         instance.nama = validated_data.get('nama', instance.nama)
         instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
@@ -151,16 +137,14 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
-# ─── PBI-XP: Forgot & Reset Password (OTP) ────────────────────────────────────
+# Forgot & Reset Password
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        if not User.objects.filter(email=value, deleted_at__isnull=True).exists():
+        if not User.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
             raise serializers.ValidationError('Email tidak ditemukan')
         return value
-
 
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -169,16 +153,23 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate(self, data):
         from .models import ResetPasswordOTP
+        email = data.get('email')
+        token = data.get('token')
         
-        # Cek apakah Token valid
         otp_record = ResetPasswordOTP.objects.filter(
-            user__email=data['email'], 
-            otp=data['token'], 
+            user__email__iexact=email, 
+            otp=token, 
             is_used=False
         ).last()
 
-        if not otp_record or not otp_record.is_valid():
-            raise serializers.ValidationError('Link reset password tidak valid atau sudah kadaluarsa')
+        if not otp_record:
+            exists = ResetPasswordOTP.objects.filter(user__email__iexact=email, otp=token).exists()
+            if exists:
+                raise serializers.ValidationError('Link ini sudah pernah digunakan.')
+            raise serializers.ValidationError('Link reset password tidak valid.')
+        
+        if not otp_record.is_valid():
+            raise serializers.ValidationError('Link reset password sudah kadaluarsa.')
         
         data['user'] = otp_record.user
         data['otp_record'] = otp_record
@@ -188,11 +179,9 @@ class ResetPasswordSerializer(serializers.Serializer):
         user = self.validated_data['user']
         otp_record = self.validated_data['otp_record']
         
-        # Update Password
         user.set_password(self.validated_data['new_password'])
         user.save()
         
-        # Tandai OTP sudah dipakai
         otp_record.is_used = True
         otp_record.save()
         

@@ -1,16 +1,22 @@
+import csv
+import os
+import threading
+import urllib.parse
+
+from django.conf import settings
+from django.core.mail import send_mail
+from django.db.models import Q
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.utils import timezone
+from django.utils.html import strip_tags
+
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-import csv
-import os
-from django.http import HttpResponse
-from django.utils import timezone
-
-from django.core.mail import send_mail
-from django.conf import settings
 
 from .models import User, ResetPasswordOTP
 from .serializers import (
@@ -20,7 +26,7 @@ from .serializers import (
 )
 from .permissions import IsSuperAdmin, IsMarketingOrSuperAdmin, IsActiveUser
 
-# ─── PBI-1: Register Customer ─────────────────────────────────────────────────
+# Register Customer
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -28,18 +34,14 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(
-                {'message': 'Registrasi berhasil'},
-                status=status.HTTP_201_CREATED
-            )
-        # Differentiate 409 vs 400
+            return Response({'message': 'Registrasi berhasil'}, status=status.HTTP_201_CREATED)
+        
         errors = serializer.errors
         if 'email' in errors and any('sudah terdaftar' in str(e) for e in errors['email']):
             return Response(errors, status=status.HTTP_409_CONFLICT)
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# ─── PBI-2: Login ─────────────────────────────────────────────────────────────
+# Login
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -60,8 +62,8 @@ class LoginView(APIView):
             'role': user.role,
             'nama': user.nama,
         }, status=status.HTTP_200_OK)
-    
-# ─── PBI-3: Logout ────────────────────────────────────────────────────────────
+
+# Logout
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -72,26 +74,10 @@ class LogoutView(APIView):
                 token = RefreshToken(refresh_token)
                 token.blacklist()
             return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
-        except TokenError:
+        except (TokenError, Exception):
             return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
 
-
-# ─── PBI-3: Logout ────────────────────────────────────────────────────────────
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            refresh_token = request.data.get('refresh')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
-        except TokenError:
-            return Response({'message': 'Logout berhasil'}, status=status.HTTP_200_OK)
-
-
-# ─── PBI-4: Register by Admin ─────────────────────────────────────────────────
+# Admin Register User
 class AdminRegisterView(APIView):
     permission_classes = [IsMarketingOrSuperAdmin]
 
@@ -99,20 +85,14 @@ class AdminRegisterView(APIView):
         serializer = AdminRegisterSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
-            return Response(
-                {
-                    'message': 'Akun berhasil dibuat',
-                    'data': serializer.data
-                },
-                status=status.HTTP_201_CREATED
-            )
+            return Response({'message': 'Akun berhasil dibuat', 'data': serializer.data}, status=status.HTTP_201_CREATED)
+        
         errors = serializer.errors
         if 'email' in errors and any('sudah terdaftar' in str(e) for e in errors['email']):
             return Response(errors, status=status.HTTP_409_CONFLICT)
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# ─── PBI-5: Edit Profile ──────────────────────────────────────────────────────
+# Profile Management
 class ProfileView(APIView):
     permission_classes = [IsActiveUser]
 
@@ -127,8 +107,6 @@ class ProfileView(APIView):
             return Response({'message': 'Profil berhasil diperbarui', 'data': serializer.data})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# ─── PBI-6: Change Password ───────────────────────────────────────────────────
 class ChangePasswordView(APIView):
     permission_classes = [IsActiveUser]
 
@@ -139,7 +117,7 @@ class ChangePasswordView(APIView):
             return Response({'message': 'Password berhasil diubah'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# ─── PBI-4 + PBI-7: Admin User Management ────────────────────────────────────
+# Admin User Management
 class AdminUserListView(generics.ListAPIView):
     permission_classes = [IsMarketingOrSuperAdmin]
     serializer_class = UserListSerializer
@@ -153,31 +131,26 @@ class AdminUserListView(generics.ListAPIView):
         elif account_type == 'external':
             queryset = queryset.filter(role__in=['Customer', 'Investor'])
             
-        # Basic Search (Non-django-filter implementation)
         search = self.request.query_params.get('search')
         if search:
-            from django.db.models import Q
             queryset = queryset.filter(
                 Q(nama__icontains=search) | 
                 Q(email__icontains=search) | 
                 Q(nomor_telepon__icontains=search)
             )
 
-        # Status Filter
         status_param = self.request.query_params.get('status')
         if status_param == 'Aktif':
             queryset = queryset.filter(is_active=True)
         elif status_param == 'Nonaktif':
             queryset = queryset.filter(is_active=False)
 
-        # Role Filter
         role_param = self.request.query_params.get('role')
         if role_param and role_param != 'all':
             queryset = queryset.filter(role=role_param)
 
         return queryset
 
-# ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
 class AdminUserDeleteView(APIView):
     permission_classes = [IsSuperAdmin]
 
@@ -188,16 +161,11 @@ class AdminUserDeleteView(APIView):
             return Response({'error': 'User tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
 
         if user.pk == request.user.pk:
-            return Response(
-                {'error': 'Anda tidak dapat menghapus akun Anda sendiri'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Anda tidak dapat menghapus akun sendiri'}, status=status.HTTP_400_BAD_REQUEST)
 
         user.soft_delete()
-        return Response({'message': 'User berhasil dihapus/nonaktifkan'}, status=status.HTTP_200_OK)
+        return Response({'message': 'User berhasil dinonaktifkan'}, status=status.HTTP_200_OK)
 
-
-# ─── Admin Update User ────────────────────────────────────────────────────────
 class AdminUserUpdateView(APIView):
     permission_classes = [IsMarketingOrSuperAdmin]
 
@@ -210,9 +178,8 @@ class AdminUserUpdateView(APIView):
             return Response({'error': 'User tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, pk):
-        # Marketing only allowed to view (GET), but not update (PUT)
         if request.user.role != 'SuperAdmin':
-            return Response({'error': 'Hanya SuperAdmin yang dapat mengedit user'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Akses ditolak'}, status=status.HTTP_403_FORBIDDEN)
             
         try:
             user = User.objects.get(pk=pk)
@@ -224,52 +191,33 @@ class AdminUserUpdateView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'User tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
 
-
-# ─── PBI-XX: Export Users to CSV ──────────────────────────────────────────────
 class AdminUserExportView(APIView):
     permission_classes = [IsSuperAdmin]
 
     def get(self, request):
         export_type = request.query_params.get('type', 'external')
-        
         if export_type == 'internal':
             roles = ['SuperAdmin', 'Marketing', 'Finance', 'CEO', 'Komisaris']
-            filename = f"akun_internal_{timezone.now().strftime('%Y%m%d')}.csv"
+            filename = f"internal_{timezone.now().strftime('%Y%m%d')}.csv"
         else:
             roles = ['Customer', 'Investor']
-            filename = f"akun_external_{timezone.now().strftime('%Y%m%d')}.csv"
+            filename = f"external_{timezone.now().strftime('%Y%m%d')}.csv"
 
         users = User.objects.filter(role__in=roles).order_by('-created_at')
-        
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
         writer = csv.writer(response)
-        # Header
-        writer.writerow(['ID', 'Nama', 'Email', 'Nomor Telepon', 'Role', 'Status', 'Tanggal Dibuat'])
+        writer.writerow(['ID', 'Nama', 'Email', 'Telepon', 'Role', 'Status', 'Dibuat'])
         
-        # Data
-        for user in users:
-            status = 'Aktif' if user.is_active else 'Nonaktif'
-            created_at = user.created_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M:%S')
-            writer.writerow([
-                user.id, 
-                user.nama, 
-                user.email, 
-                user.nomor_telepon, 
-                user.role, 
-                status, 
-                created_at
-            ])
+        for u in users:
+            stat = 'Aktif' if u.is_active else 'Nonaktif'
+            date = u.created_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M')
+            writer.writerow([u.id, u.nama, u.email, u.nomor_telepon, u.role, stat, date])
             
         return response
 
-
-import threading
-from django.template.loader import render_to_string
-from django.utils.html import strip_tags
-
-# ─── PBI-XP: Forgot & Reset Password (Token via Email) ────────────────────────
+# Forgot & Reset Password
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
 
@@ -277,52 +225,35 @@ class ForgotPasswordView(APIView):
         serializer = ForgotPasswordSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
-            user = User.objects.get(email=email)
             
-            # 1. Generate Secure Token
-            import secrets
-            reset_token = secrets.token_urlsafe(32)
-            
-            # 2. Simpan ke database
-            ResetPasswordOTP.objects.create(user=user, otp=reset_token)
-            
-            # 3. Create Direct Reset Link
-            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-            reset_link = f"{frontend_url}/forgot-password?token={reset_token}&email={email}"
-            
-            # 4. Kirim Email di Background
-            def send_reset_email():
-                subject = 'MazaShield - Permintaan Reset Password'
-                
-                context = {
-                    'nama': user.nama,
-                    'reset_link': reset_link,
-                }
-                
-                html_content = render_to_string('accounts/email/reset_password_email.html', context)
-                text_content = strip_tags(html_content)
-                
+            def process_forgot_password(target_email):
                 try:
-                    send_mail(
-                        subject, 
-                        text_content, 
-                        settings.EMAIL_HOST_USER, 
-                        [email], 
-                        html_message=html_content,
-                        fail_silently=False
-                    )
-                    print(f"SUCCESS: Reset email sent to {email}")
-                except Exception as e:
-                    print(f"EMAIL ERROR: {e}")
+                    user = User.objects.filter(email__iexact=target_email, deleted_at__isnull=True).first()
+                    if not user: return
 
-            threading.Thread(target=send_reset_email).start()
-            
-            return Response({
-                'message': 'Link reset password telah dikirim ke email Anda'
-            }, status=status.HTTP_200_OK)
+                    import secrets
+                    reset_token = secrets.token_urlsafe(32)
+                    ResetPasswordOTP.objects.create(user=user, otp=reset_token)
+                    
+                    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+                    safe_email = urllib.parse.quote(user.email)
+                    reset_link = f"{frontend_url}/forgot-password?token={reset_token}&email={safe_email}"
+                    
+                    context = {'nama': user.nama, 'reset_link': reset_link}
+                    html_content = render_to_string('accounts/email/reset_password_email.html', context)
+                    
+                    send_mail(
+                        'MazaShield - Reset Password', strip_tags(html_content),
+                        settings.EMAIL_HOST_USER, [user.email],
+                        html_message=html_content, fail_silently=False
+                    )
+                except Exception as e:
+                    print(f"Error: {e}")
+
+            threading.Thread(target=process_forgot_password, args=(email,)).start()
+            return Response({'message': 'Link reset password akan dikirim jika email terdaftar.'}, status=status.HTTP_200_OK)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
@@ -331,5 +262,5 @@ class ResetPasswordView(APIView):
         serializer = ResetPasswordSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response({'message': 'Password berhasil diperbarui. Silakan login kembali.'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Password berhasil diperbarui'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

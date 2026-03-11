@@ -3,7 +3,6 @@ from django.db import models
 from django.utils import timezone
 from datetime import timedelta
 
-
 class UserManager(BaseUserManager):
     def create_user(self, email, nama, nomor_telepon, password=None, role='Customer'):
         if not email:
@@ -30,7 +29,6 @@ class UserManager(BaseUserManager):
         user.is_superuser = True
         user.save(using=self._db)
         return user
-
 
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [
@@ -74,14 +72,11 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.is_active = False
         self.save(update_fields=['deleted_at', 'is_active'])
 
-
 class ResetPasswordOTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    # Ubah menjadi token panjang (mendukung UUID atau random string)
     otp = models.CharField(max_length=100) 
     created_at = models.DateTimeField(auto_now_add=True)
     is_used = models.BooleanField(default=False)
 
     def is_valid(self):
-        # Valid selama 15 menit
         return not self.is_used and timezone.now() < self.created_at + timedelta(minutes=15)

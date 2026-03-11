@@ -1,20 +1,14 @@
 from rest_framework import serializers
 from django.utils import timezone
-from .models import Ternak
+from .models import Ternak, Daging
 
-
-# ══════════════════════════════════════════════════════════════════
-#  MAZDAFARM — Ternak (PBI 8–12)
-# ══════════════════════════════════════════════════════════════════
-
+# Mazdafarm (Ternak)
 class TernakCreateSerializer(serializers.ModelSerializer):
-    """PBI-8: Create Katalog Mazdafarm"""
-
     class Meta:
         model = Ternak
         fields = [
-            'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 'tanggal_lahir', 'harga',
-            'deskripsi', 'foto', 'status_ternak',
+            'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 
+            'berat_target', 'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
         ]
 
     def validate_id_ternak(self, value):
@@ -37,13 +31,13 @@ class TernakCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Harga harus lebih dari 0')
         return value
 
-
 class TernakUpdateSerializer(serializers.ModelSerializer):
-    """PBI-9: Update Katalog Mazdafarm"""
-
     class Meta:
         model = Ternak
-        fields = ['nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak']
+        fields = [
+            'nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 
+            'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
+        ]
 
     def validate_berat(self, value):
         if value <= 0:
@@ -66,31 +60,21 @@ class TernakUpdateSerializer(serializers.ModelSerializer):
         return value
 
 class TernakSerializer(serializers.ModelSerializer):
-    """PBI-11 & PBI-12: Read Katalog Mazdafarm"""
     umur = serializers.ReadOnlyField()
 
     class Meta:
         model = Ternak
         fields = [
-            'id', 'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 'tanggal_lahir', 'umur', 'harga',
-            'deskripsi', 'foto', 'status_ternak', 'created_at', 'updated_at',
+            'id', 'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 
+            'berat_target', 'tanggal_lahir', 'umur', 'harga', 'deskripsi', 
+            'foto', 'status_ternak', 'created_at', 'updated_at'
         ]
 
-
-# ══════════════════════════════════════════════════════════════════
-#  MAZDAGING — Daging (PBI 13–17)
-# ══════════════════════════════════════════════════════════════════
-
-from .models import Daging
-
+# Mazdaging (Daging)
 class DagingCreateSerializer(serializers.ModelSerializer):
-    """PBI-13: Create Katalog Mazdaging"""
-
     class Meta:
         model = Daging
-        fields = [
-            'id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging',
-        ]
+        fields = ['id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging']
 
     def validate_id_daging(self, value):
         if Daging.objects.filter(id_daging=value, deleted_at__isnull=True).exists():
@@ -102,10 +86,7 @@ class DagingCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Harga per kg harus lebih dari 0')
         return value
 
-
 class DagingUpdateSerializer(serializers.ModelSerializer):
-    """PBI-14: Update Katalog Mazdaging"""
-
     class Meta:
         model = Daging
         fields = ['nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging']
@@ -116,10 +97,9 @@ class DagingUpdateSerializer(serializers.ModelSerializer):
         return value
     
 class DagingSerializer(serializers.ModelSerializer):
-    """PBI-16 & PBI-17: Read Katalog Mazdaging"""
     class Meta:
         model = Daging
         fields = [
-            'id', 'id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging',
-            'created_at', 'updated_at',
+            'id', 'id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 
+            'foto', 'status_daging', 'created_at', 'updated_at'
         ]
