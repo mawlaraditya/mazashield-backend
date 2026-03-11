@@ -44,3 +44,34 @@ class Ternak(models.Model):
             return 0
         today = timezone.now().date()
         return (today.year - self.tanggal_lahir.year) * 12 + today.month - self.tanggal_lahir.month
+
+class Daging(models.Model):
+    """Katalog Mazdaging — PBI 13-17"""
+    STATUS_CHOICES = [
+        ('Tersedia', 'Tersedia'),
+        ('Terjual', 'Terjual'),
+        ('Pre Order', 'Pre Order'),
+    ]
+
+    id_daging = models.CharField(max_length=50, unique=True)
+    nama = models.CharField(max_length=255)
+    bagian = models.CharField(max_length=100)
+    harga_per_kg = models.DecimalField(max_digits=15, decimal_places=2)
+    deskripsi = models.TextField()
+    foto = models.ImageField(upload_to='daging/', null=True, blank=True)
+    status_daging = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Tersedia')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'daging'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.id_daging} — {self.nama}'
+
+    def soft_delete(self):
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['deleted_at'])
