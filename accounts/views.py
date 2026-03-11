@@ -20,7 +20,6 @@ from .serializers import (
 )
 from .permissions import IsSuperAdmin, IsMarketingOrSuperAdmin, IsActiveUser
 
-
 # ─── PBI-1: Register Customer ─────────────────────────────────────────────────
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -140,15 +139,43 @@ class ChangePasswordView(APIView):
             return Response({'message': 'Password berhasil diubah'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 # ─── PBI-4 + PBI-7: Admin User Management ────────────────────────────────────
 class AdminUserListView(generics.ListAPIView):
     permission_classes = [IsMarketingOrSuperAdmin]
     serializer_class = UserListSerializer
 
     def get_queryset(self):
-        return User.objects.all().order_by('-created_at')
+        queryset = User.objects.all().order_by('-created_at')
+        account_type = self.request.query_params.get('type')
+        
+        if account_type == 'internal':
+            queryset = queryset.filter(role__in=['SuperAdmin', 'Marketing', 'Finance', 'CEO', 'Komisaris'])
+        elif account_type == 'external':
+            queryset = queryset.filter(role__in=['Customer', 'Investor'])
+            
+        # Basic Search (Non-django-filter implementation)
+        search = self.request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(nama__icontains=search) | 
+                Q(email__icontains=search) | 
+                Q(nomor_telepon__icontains=search)
+            )
 
+        # Status Filter
+        status_param = self.request.query_params.get('status')
+        if status_param == 'Aktif':
+            queryset = queryset.filter(is_active=True)
+        elif status_param == 'Nonaktif':
+            queryset = queryset.filter(is_active=False)
+
+        # Role Filter
+        role_param = self.request.query_params.get('role')
+        if role_param and role_param != 'all':
+            queryset = queryset.filter(role=role_param)
+
+        return queryset
 
 # ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
 class AdminUserDeleteView(APIView):

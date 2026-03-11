@@ -114,3 +114,12 @@ class DagingUpdateSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError('Harga per kg harus lebih dari 0')
         return value
+    
+class DagingSerializer(serializers.ModelSerializer):
+    """PBI-16 & PBI-17: Read Katalog Mazdaging"""
+    class Meta:
+        model = Daging
+        fields = [
+            'id', 'id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging',
+            'created_at', 'updated_at',
+        ]
