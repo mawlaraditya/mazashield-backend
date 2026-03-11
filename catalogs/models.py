@@ -1,9 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
-
 class Ternak(models.Model):
-    """Katalog Mazdafarm — PBI 8-12"""
     STATUS_CHOICES = [
         ('Tersedia', 'Tersedia'),
         ('Dipesan', 'Dipesan'),
@@ -39,14 +37,12 @@ class Ternak(models.Model):
 
     @property
     def umur(self):
-        """Menghitung umur dalam bulan secara real-time"""
         if not self.tanggal_lahir:
             return 0
         today = timezone.now().date()
         return (today.year - self.tanggal_lahir.year) * 12 + today.month - self.tanggal_lahir.month
 
 class Daging(models.Model):
-    """Katalog Mazdaging — PBI 13-17"""
     STATUS_CHOICES = [
         ('Tersedia', 'Tersedia'),
         ('Terjual', 'Terjual'),
