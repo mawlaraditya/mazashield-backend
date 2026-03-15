@@ -2,6 +2,7 @@ from django.urls import path
 from catalogs.views import (
     TernakPublicListView,
     DagingPublicListView,
+    InvestPublicListView,
 )
 
 urlpatterns = [
@@ -10,4 +11,7 @@ urlpatterns = [
 
     # PBI-17 GET /api/mazdaging   → Public catalog Mazdaging
     path('mazdaging', DagingPublicListView.as_view(), name='daging-public-list'),
+
+    # GET /api/invest   → Public catalog Invest Ternak
+    path('invest', InvestPublicListView.as_view(), name='invest-public-list'),
 ]
