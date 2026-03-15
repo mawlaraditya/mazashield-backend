@@ -4,7 +4,7 @@ import threading
 import urllib.parse
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.db.models import Q
 from django.http import HttpResponse
 from django.template.loader import render_to_string
@@ -223,37 +223,51 @@ class ForgotPasswordView(APIView):
 
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
-            def process_forgot_password(target_email):
-                try:
-                    user = User.objects.filter(email__iexact=target_email, deleted_at__isnull=True).first()
-                    if not user: return
-
-                    import secrets
-                    reset_token = secrets.token_urlsafe(32)
-                    ResetPasswordOTP.objects.create(user=user, otp=reset_token)
-                    
-                    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-                    safe_email = urllib.parse.quote(user.email)
-                    reset_link = f"{frontend_url}/forgot-password?token={reset_token}&email={safe_email}"
-                    
-                    context = {'nama': user.nama, 'reset_link': reset_link}
-                    html_content = render_to_string('accounts/email/reset_password_email.html', context)
-                    
-                    send_mail(
-                        'MazaShield - Reset Password', strip_tags(html_content),
-                        settings.EMAIL_HOST_USER, [user.email],
-                        html_message=html_content, fail_silently=False
-                    )
-                except Exception as e:
-                    print(f"Error: {e}")
-
-            threading.Thread(target=process_forgot_password, args=(email,)).start()
-            return Response({'message': 'Link reset password akan dikirim jika email terdaftar.'}, status=status.HTTP_200_OK)
+        email = serializer.validated_data['email']
         
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Always return 200 immediately to prevent email enumeration and provide fast response
+        response = Response({'message': 'Link reset password akan dikirim jika email terdaftar.'}, status=status.HTTP_200_OK)
+        
+        # User lookup is fast enough to do here before threading
+        user = User.objects.filter(email__iexact=email, deleted_at__isnull=True).first()
+        
+        if user:
+            import secrets
+            # 1. Prepare data (Fast DB ops)
+            reset_token = secrets.token_urlsafe(32)
+            ResetPasswordOTP.objects.create(user=user, otp=reset_token)
+            
+            # 2. Prepare link and content
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+            safe_email = urllib.parse.quote(user.email)
+            reset_link = f"{frontend_url}/forgot-password?token={reset_token}&email={safe_email}"
+            
+            context = {'nama': user.nama, 'reset_link': reset_link}
+            html_content = render_to_string('accounts/email/reset_password_email.html', context)
+            text_content = strip_tags(html_content)
+            subject = 'MazaShield - Reset Password'
+            recipient = user.email
+
+            # 3. Fire and forget ONLY the network IO part
+            def send_mail_async(subject, text, html, to):
+                try:
+                    msg = EmailMultiAlternatives(
+                        subject, text, 
+                        settings.EMAIL_HOST_USER, [to]
+                    )
+                    msg.attach_alternative(html, "text/html")
+                    msg.send(fail_silently=False)
+                except Exception as e:
+                    print(f"SMTP Error: {e}")
+
+            email_thread = threading.Thread(target=send_mail_async, args=(subject, text_content, html_content, recipient))
+            email_thread.daemon = True
+            email_thread.start()
+            
+        return response
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]

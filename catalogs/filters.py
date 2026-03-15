@@ -31,6 +31,7 @@ class DagingFilter(django_filters.FilterSet):
 class InvestFilter(django_filters.FilterSet):
     """Filter untuk Invest Ternak"""
     nama = django_filters.CharFilter(lookup_expr='icontains')
+    jenis = django_filters.CharFilter(lookup_expr='icontains')
     status_investernak = django_filters.CharFilter(lookup_expr='exact')
     
     # Range filters
@@ -45,4 +46,4 @@ class InvestFilter(django_filters.FilterSet):
 
     class Meta:
         model = Invest
-        fields = ['nama', 'status_investernak', 'id_invest']
+        fields = ['nama', 'jenis', 'status_investernak', 'id_invest']

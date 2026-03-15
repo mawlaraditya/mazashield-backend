@@ -83,6 +83,7 @@ class Invest(models.Model):
 
     id_invest = models.CharField(max_length=50, unique=True)
     nama = models.CharField(max_length=255)
+    jenis = models.CharField(max_length=100, default='Sapi')
     berat = models.DecimalField(max_digits=10, decimal_places=2)
     umur = models.IntegerField()
     harga_beli = models.DecimalField(max_digits=15, decimal_places=2)

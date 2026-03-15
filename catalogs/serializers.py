@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils import timezone
-from .models import Ternak, Daging
+from .models import Ternak, Daging, Invest
 
 # Mazdafarm (Ternak)
 class TernakCreateSerializer(serializers.ModelSerializer):
@@ -102,4 +102,66 @@ class DagingSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 
             'foto', 'status_daging', 'created_at', 'updated_at'
+        ]
+
+
+# Invest Ternak
+class InvestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invest
+        fields = [
+            'id_invest', 'nama', 'jenis', 'berat', 'umur', 'harga_beli', 
+            'harga_jual_per_kg', 'deskripsi', 'foto', 'status_investernak'
+        ]
+
+    def validate_id_invest(self, value):
+        if Invest.objects.filter(id_invest=value, deleted_at__isnull=True).exists():
+            raise serializers.ValidationError('ID Invest sudah digunakan')
+        return value
+
+    def validate_berat(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Berat harus lebih dari 0')
+        return value
+
+    def validate_harga_beli(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Harga beli harus lebih dari 0')
+        return value
+
+    def validate_harga_jual_per_kg(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Harga jual per kg harus lebih dari 0')
+        return value
+
+class InvestUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invest
+        fields = [
+            'nama', 'jenis', 'berat', 'umur', 'harga_beli', 
+            'harga_jual_per_kg', 'deskripsi', 'foto', 'status_investernak'
+        ]
+
+    def validate_berat(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Berat harus lebih dari 0')
+        return value
+
+    def validate_harga_beli(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Harga beli harus lebih dari 0')
+        return value
+
+    def validate_harga_jual_per_kg(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Harga jual per kg harus lebih dari 0')
+        return value
+
+class InvestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invest
+        fields = [
+            'id', 'id_invest', 'nama', 'jenis', 'berat', 'umur', 'harga_beli', 
+            'harga_jual_per_kg', 'deskripsi', 'foto', 'status_investernak',
+            'created_at', 'updated_at'
         ]
