@@ -42,8 +42,6 @@ class LoginSerializer(serializers.Serializer):
         user.save(update_fields=['last_login'])
         data['user'] = user
         return data
-<<<<<<< HEAD
-
 
 # ─── PBI-4: Register by Admin ─────────────────────────────────────────────────
 VALID_ROLES = [r[0] for r in User.ROLE_CHOICES]
@@ -60,9 +58,9 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
         if value not in VALID_ROLES:
             raise serializers.ValidationError(f'Role tidak valid. Pilihan: {VALID_ROLES}')
         
-        # 1. Marketing can ONLY create Customer
-        if request_user.role == 'Marketing' and value != 'Customer':
-            raise serializers.ValidationError('Marketing hanya dapat membuat akun Customer')
+        # 1. Marketing can ONLY create Customer or Investor (based on latest refactor)
+        if request_user.role == 'Marketing' and value not in ['Customer', 'Investor']:
+            raise serializers.ValidationError('Marketing hanya dapat membuat akun Customer atau Investor')
         
         # 2. CEO dan Komisaris itu 1 orang (mencegah duplikasi peran jika sudah ada)
         if value in ['CEO', 'Komisaris']:
@@ -72,7 +70,7 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
         return value
 
     def validate_email(self, value):
-        if User.objects.filter(email=value, deleted_at__isnull=True).exists():
+        if User.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
             raise serializers.ValidationError('Email sudah terdaftar')
         return value
 
@@ -151,104 +149,9 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
         instance.updated_at = timezone.now()
         instance.save()
         return instance
-=======
->>>>>>> 9c30bed2f80a9b46649c9ca0451f6c189e130ad6
 
-# Register by Admin
-VALID_ROLES = [r[0] for r in User.ROLE_CHOICES]
 
-class AdminRegisterSerializer(serializers.ModelSerializer):
-    generated_password = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = User
-        fields = ['nama', 'nomor_telepon', 'email', 'role', 'generated_password']
-
-    def validate_role(self, value):
-        request_user = self.context.get('request').user
-        if value not in VALID_ROLES:
-            raise serializers.ValidationError(f'Role tidak valid. Pilihan: {VALID_ROLES}')
-        
-        if request_user.role == 'Marketing' and value not in ['Customer', 'Investor']:
-            raise serializers.ValidationError('Marketing hanya diperbolehkan membuat akun Customer atau Investor')
-        
-        if value in ['CEO', 'Komisaris']:
-            if User.objects.filter(role__in=['CEO', 'Komisaris']).exists():
-                raise serializers.ValidationError('Role CEO/Komisaris sudah ada')
-        
-        return value
-
-    def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError('Email sudah terdaftar')
-        return value
-
-    def create(self, validated_data):
-        random_pwd = get_random_string(length=12)
-        validated_data['password'] = random_pwd
-        user = User.objects.create_user(**validated_data)
-        user.generated_password = random_pwd
-        return user
-
-# Profile
-class ProfileSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(read_only=True)
-    role = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = User
-        fields = ['nama', 'nomor_telepon', 'email', 'role']
-
-    def update(self, instance, validated_data):
-        instance.nama = validated_data.get('nama', instance.nama)
-        instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
-        instance.updated_at = timezone.now()
-        instance.save(update_fields=['nama', 'nomor_telepon', 'updated_at'])
-        return instance
-
-# Change Password
-class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True, min_length=8)
-
-    def validate(self, data):
-        user = self.context['request'].user
-        if not user.check_password(data['old_password']):
-            raise serializers.ValidationError({'old_password': 'Password lama salah'})
-        if data['old_password'] == data['new_password']:
-            raise serializers.ValidationError({'new_password': 'Password baru tidak boleh sama dengan password lama'})
-        return data
-
-    def save(self):
-        user = self.context['request'].user
-        user.set_password(self.validated_data['new_password'])
-        user.updated_at = timezone.now()
-        user.save(update_fields=['password', 'updated_at'])
-        return user
-
-# Admin User Management
-class UserListSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'nama', 'nomor_telepon', 'email', 'role', 'is_active', 'created_at']
-
-class AdminUserUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['nama', 'nomor_telepon', 'role']
-
-    def update(self, instance, validated_data):
-        if instance.deleted_at is not None or not instance.is_active:
-             raise serializers.ValidationError({'detail': 'Akun ini sudah dinonaktifkan.'})
-
-        instance.nama = validated_data.get('nama', instance.nama)
-        instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
-        instance.role = validated_data.get('role', instance.role)
-        instance.updated_at = timezone.now()
-        instance.save()
-        return instance
-
-# Forgot & Reset Password
+# ─── Forgot & Reset Password ──────────────────────────────────────────────────
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
