@@ -2,6 +2,7 @@ from django.urls import path
 from catalogs.views import (
     TernakInternalListCreateView, TernakInternalDetailView,
     DagingInternalListCreateView, DagingInternalDetailView,
+    InvestInternalListCreateView, InvestInternalDetailView,
 )
 
 urlpatterns = [
@@ -21,5 +22,14 @@ urlpatterns = [
 
     # PBI-14 PUT    /api/sales/mazdaging/<id>  → Update
     # PBI-15 DELETE /api/sales/mazdaging/<id>  → Soft Delete
-    path('mazdaging/<int:pk>', DagingInternalDetailView.as_view(), name='daging-internal-detail')
+    path('mazdaging/<int:pk>', DagingInternalDetailView.as_view(), name='daging-internal-detail'),
+
+    # ── Invest Ternak Internal ────────────────────────────────────────────────────
+    # PBI-18 POST  /api/sales/invest    → Create
+    # GET  /api/sales/invest    → Read Internal
+    path('invest', InvestInternalListCreateView.as_view(), name='invest-internal-list'),
+
+    # PBI-19 PUT  /api/sales/invest/<id>  → Update
+    # PBI-20 DELETE /api/sales/invest/<id>  → Soft Delete
+    path('invest/<int:pk>', InvestInternalDetailView.as_view(), name='invest-internal-detail'),
 ]

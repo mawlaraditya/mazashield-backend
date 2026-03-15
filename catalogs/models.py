@@ -71,3 +71,38 @@ class Daging(models.Model):
     def soft_delete(self):
         self.deleted_at = timezone.now()
         self.save(update_fields=['deleted_at'])
+
+
+class Invest(models.Model):
+    """Katalog Invest Ternak — PBI 18-20"""
+    STATUS_CHOICES = [
+        ('Tersedia', 'Tersedia'),
+        ('Dipesan', 'Dipesan'),
+        ('Terjual', 'Terjual'),
+    ]
+
+    id_invest = models.CharField(max_length=50, unique=True)
+    nama = models.CharField(max_length=255)
+    berat = models.DecimalField(max_digits=10, decimal_places=2)
+    umur = models.IntegerField()
+    harga_beli = models.DecimalField(max_digits=15, decimal_places=2)
+    harga_jual_per_kg = models.DecimalField(max_digits=15, decimal_places=2)
+    deskripsi = models.TextField()
+    foto = models.ImageField(upload_to='invest/', null=True, blank=True)
+    status_investernak = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Tersedia')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'invest'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.id_invest} — {self.nama}'
+
+    def soft_delete(self):
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['deleted_at'])
+
