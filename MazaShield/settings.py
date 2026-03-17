@@ -61,6 +61,7 @@ AUTH_USER_MODEL = 'accounts.User'
 # APPLICATIONS
 # =====================
 INSTALLED_APPS = [
+    'accounts',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -69,7 +70,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
-    'accounts',
     'catalogs',
     'django_filters',
 ]
