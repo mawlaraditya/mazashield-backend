@@ -9,10 +9,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
-
-# Normalize environment values and provide safe defaults for development.
-# Note: in production ensure SECRET_KEY and DEBUG are set in the platform env (Railway, etc.).
-
 # =====================
 # SECURITY
 # =====================
@@ -35,6 +31,33 @@ DEFAULT_ALLOWED = "localhost,127.0.0.1,mazashield-backend-production.up.railway.
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", DEFAULT_ALLOWED).split(",") if h.strip()]
 
 # =====================
+# REST FRAMEWORK & JWT
+# =====================
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
+}
+
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+AUTH_USER_MODEL = 'accounts.User'
+# =====================
 # APPLICATIONS
 # =====================
 INSTALLED_APPS = [
@@ -46,6 +69,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'accounts',
+    'catalogs',
+    'django_filters',
 ]
 
 MIDDLEWARE = [
@@ -127,6 +153,26 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # =====================
+# MEDIA FILES
+# =====================
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# =====================
 # MISC
 # =====================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# =====================
+# EMAIL CONFIGURATION
+# =====================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_SSL = False
+EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 10
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = f"MazaShield <{EMAIL_HOST_USER}>"
