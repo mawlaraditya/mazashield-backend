@@ -7,10 +7,25 @@ class Ternak(models.Model):
         ('Dipesan', 'Dipesan'),
         ('Terjual', 'Terjual'),
     ]
+    
+    JENIS_CHOICES = [
+        ('Sapi', 'Sapi'),
+        ('Kambing', 'Kambing'),
+    ]
+
+    KELAS_CHOICES = [
+        ('A', 'Kelas A'),
+        ('B', 'Kelas B'),
+        ('C', 'Kelas C'),
+        ('D', 'Kelas D'),
+        ('E', 'Kelas E'),
+        ('Patungan', 'Patungan'),
+    ]
 
     id_ternak = models.CharField(max_length=50, unique=True)
     nama = models.CharField(max_length=255)
-    jenis = models.CharField(max_length=100, default='Sapi')
+    jenis = models.CharField(max_length=100, choices=JENIS_CHOICES, default='Sapi')
+    kelas = models.CharField(max_length=20, choices=KELAS_CHOICES, null=True, blank=True)
     berat = models.DecimalField(max_digits=10, decimal_places=2)
     tanggal_penimbangan = models.DateField(default=timezone.now)
     berat_target = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -76,21 +91,30 @@ class Daging(models.Model):
 class Invest(models.Model):
     """Katalog Invest Ternak — PBI 18-20"""
     STATUS_CHOICES = [
-        ('Tersedia', 'Tersedia'),
-        ('Dipesan', 'Dipesan'),
-        ('Terjual', 'Terjual'),
+        ('Open', 'Open'),
+        ('Ongoing', 'Ongoing'),
+        ('Closed', 'Closed'),
     ]
 
     id_invest = models.CharField(max_length=50, unique=True)
-    nama = models.CharField(max_length=255)
+    nama_paket = models.CharField(max_length=255)
+    harga_sapi = models.DecimalField(max_digits=15, decimal_places=2)
+    biaya_pemeliharaan = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    vaksin_vitamin = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    fee_marketing = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    total_modal = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    harga_jual = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    keuntungan = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    hasil_investor = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    roi_persen = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Metadata
     jenis = models.CharField(max_length=100, default='Sapi')
-    berat = models.DecimalField(max_digits=10, decimal_places=2)
-    umur = models.IntegerField()
-    harga_beli = models.DecimalField(max_digits=15, decimal_places=2)
-    harga_jual_per_kg = models.DecimalField(max_digits=15, decimal_places=2)
-    deskripsi = models.TextField()
+    berat = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    durasi_hari = models.IntegerField(default=120)
+    deskripsi = models.TextField(null=True, blank=True)
     foto = models.ImageField(upload_to='invest/', null=True, blank=True)
-    status_investernak = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Tersedia')
+    status_investernak = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Open')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -101,7 +125,7 @@ class Invest(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.id_invest} — {self.nama}'
+        return f'{self.id_invest} — {self.nama_paket}'
 
     def soft_delete(self):
         self.deleted_at = timezone.now()
