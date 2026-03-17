@@ -7,7 +7,7 @@ class TernakCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ternak
         fields = [
-            'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 
+            'id_ternak', 'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 
             'berat_target', 'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
         ]
 
@@ -35,7 +35,7 @@ class TernakUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ternak
         fields = [
-            'nama', 'jenis', 'berat', 'tanggal_penimbangan', 'berat_target', 
+            'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 'berat_target', 
             'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
         ]
 
@@ -65,7 +65,7 @@ class TernakSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ternak
         fields = [
-            'id', 'id_ternak', 'nama', 'jenis', 'berat', 'tanggal_penimbangan', 
+            'id', 'id_ternak', 'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 
             'berat_target', 'tanggal_lahir', 'umur', 'harga', 'deskripsi', 
             'foto', 'status_ternak', 'created_at', 'updated_at'
         ]
@@ -110,8 +110,10 @@ class InvestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invest
         fields = [
-            'id_invest', 'nama', 'jenis', 'berat', 'umur', 'harga_beli', 
-            'harga_jual_per_kg', 'deskripsi', 'foto', 'status_investernak'
+            'id_invest', 'nama_paket', 'harga_sapi', 'biaya_pemeliharaan', 
+            'vaksin_vitamin', 'fee_marketing', 'total_modal', 'harga_jual', 
+            'keuntungan', 'hasil_investor', 'roi_persen',
+            'jenis', 'berat', 'durasi_hari', 'deskripsi', 'foto', 'status_investernak'
         ]
 
     def validate_id_invest(self, value):
@@ -119,49 +121,33 @@ class InvestCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('ID Invest sudah digunakan')
         return value
 
-    def validate_berat(self, value):
+    def validate_harga_sapi(self, value):
         if value <= 0:
-            raise serializers.ValidationError('Berat harus lebih dari 0')
-        return value
-
-    def validate_harga_beli(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Harga beli harus lebih dari 0')
-        return value
-
-    def validate_harga_jual_per_kg(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Harga jual per kg harus lebih dari 0')
+            raise serializers.ValidationError('Harga sapi harus lebih dari 0')
         return value
 
 class InvestUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invest
         fields = [
-            'nama', 'jenis', 'berat', 'umur', 'harga_beli', 
-            'harga_jual_per_kg', 'deskripsi', 'foto', 'status_investernak'
+            'nama_paket', 'harga_sapi', 'biaya_pemeliharaan', 
+            'vaksin_vitamin', 'fee_marketing', 'total_modal', 'harga_jual', 
+            'keuntungan', 'hasil_investor', 'roi_persen',
+            'jenis', 'berat', 'durasi_hari', 'deskripsi', 'foto', 'status_investernak'
         ]
 
-    def validate_berat(self, value):
+    def validate_harga_sapi(self, value):
         if value <= 0:
-            raise serializers.ValidationError('Berat harus lebih dari 0')
-        return value
-
-    def validate_harga_beli(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Harga beli harus lebih dari 0')
-        return value
-
-    def validate_harga_jual_per_kg(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Harga jual per kg harus lebih dari 0')
+            raise serializers.ValidationError('Harga sapi harus lebih dari 0')
         return value
 
 class InvestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invest
         fields = [
-            'id', 'id_invest', 'nama', 'jenis', 'berat', 'umur', 'harga_beli', 
-            'harga_jual_per_kg', 'deskripsi', 'foto', 'status_investernak',
+            'id', 'id_invest', 'nama_paket', 'harga_sapi', 'biaya_pemeliharaan', 
+            'vaksin_vitamin', 'fee_marketing', 'total_modal', 'harga_jual', 
+            'keuntungan', 'hasil_investor', 'roi_persen',
+            'jenis', 'berat', 'durasi_hari', 'deskripsi', 'foto', 'status_investernak',
             'created_at', 'updated_at'
         ]
