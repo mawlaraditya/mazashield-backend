@@ -62,7 +62,7 @@ AUTH_USER_MODEL = 'accounts.User'
 # =====================
 INSTALLED_APPS = [
     'accounts',
-    'django.contrib.admin',
+    # 'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
