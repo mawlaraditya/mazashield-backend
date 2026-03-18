@@ -15,7 +15,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
             raise serializers.ValidationError('Email sudah terdaftar')
-        return value
+        return value.lower()
 
     def create(self, validated_data):
         return User.objects.create_user(
@@ -32,7 +32,8 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
+        email = data['email'].lower()
+        user = authenticate(username=email, password=data['password'])
         if not user:
             raise serializers.ValidationError('Email atau password salah', code='unauthorized')
         if not user.is_active or user.deleted_at is not None:
@@ -72,7 +73,7 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
             raise serializers.ValidationError('Email sudah terdaftar')
-        return value
+        return value.lower()
 
     def create(self, validated_data):
         # Generate random password
@@ -136,6 +137,9 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
         fields = ['nama', 'nomor_telepon', 'role', 'is_active']
 
     def update(self, instance, validated_data):
+        if instance.deleted_at is not None:
+            raise serializers.ValidationError("Akun yang sudah dihapus (nonaktif) tidak dapat diaktifkan kembali.")
+            
         new_active_status = validated_data.get('is_active', instance.is_active)
         
         # If reactivating, clear deleted_at
@@ -158,7 +162,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
     def validate_email(self, value):
         if not User.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
             raise serializers.ValidationError('Email tidak ditemukan')
-        return value
+        return value.lower()
 
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -167,7 +171,7 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate(self, data):
         from .models import ResetPasswordOTP
-        email = data.get('email')
+        email = data.get('email').lower() if data.get('email') else None
         token = data.get('token')
         
         otp_record = ResetPasswordOTP.objects.filter(

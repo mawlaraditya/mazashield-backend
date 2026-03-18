@@ -45,3 +45,8 @@ htmlcov/
 # Misc
 *.bak
 *.swp
+
+# Tools and temporary scripts
+Bruno-MazaShield/
+fix_all_migrations.py
+fix_db.py

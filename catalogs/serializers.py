@@ -10,11 +10,7 @@ class TernakCreateSerializer(serializers.ModelSerializer):
             'id_ternak', 'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 
             'berat_target', 'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
         ]
-
-    def validate_id_ternak(self, value):
-        if Ternak.objects.filter(id_ternak=value, deleted_at__isnull=True).exists():
-            raise serializers.ValidationError('ID Ternak sudah digunakan')
-        return value
+        read_only_fields = ['id_ternak']
 
     def validate_berat(self, value):
         if value <= 0:
@@ -75,11 +71,7 @@ class DagingCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Daging
         fields = ['id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging']
-
-    def validate_id_daging(self, value):
-        if Daging.objects.filter(id_daging=value, deleted_at__isnull=True).exists():
-            raise serializers.ValidationError('ID Daging sudah digunakan')
-        return value
+        read_only_fields = ['id_daging']
 
     def validate_harga_per_kg(self, value):
         if value <= 0:
@@ -115,11 +107,7 @@ class InvestCreateSerializer(serializers.ModelSerializer):
             'keuntungan', 'hasil_investor', 'roi_persen',
             'jenis', 'berat', 'durasi_hari', 'deskripsi', 'foto', 'status_investernak'
         ]
-
-    def validate_id_invest(self, value):
-        if Invest.objects.filter(id_invest=value, deleted_at__isnull=True).exists():
-            raise serializers.ValidationError('ID Invest sudah digunakan')
-        return value
+        read_only_fields = ['id_invest']
 
     def validate_harga_sapi(self, value):
         if value <= 0:
