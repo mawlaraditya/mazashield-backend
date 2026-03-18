@@ -30,20 +30,20 @@ class DagingFilter(django_filters.FilterSet):
 
 class InvestFilter(django_filters.FilterSet):
     """Filter untuk Invest Ternak"""
-    nama = django_filters.CharFilter(lookup_expr='icontains')
+    nama_paket = django_filters.CharFilter(lookup_expr='icontains')
     jenis = django_filters.CharFilter(lookup_expr='icontains')
     status_investernak = django_filters.CharFilter(lookup_expr='exact')
     
     # Range filters
-    min_harga_beli = django_filters.NumberFilter(field_name="harga_beli", lookup_expr='gte')
-    max_harga_beli = django_filters.NumberFilter(field_name="harga_beli", lookup_expr='lte')
-    min_harga_jual = django_filters.NumberFilter(field_name="harga_jual_per_kg", lookup_expr='gte')
-    max_harga_jual = django_filters.NumberFilter(field_name="harga_jual_per_kg", lookup_expr='lte')
+    min_harga_sapi = django_filters.NumberFilter(field_name="harga_sapi", lookup_expr='gte')
+    max_harga_sapi = django_filters.NumberFilter(field_name="harga_sapi", lookup_expr='lte')
+    min_harga_jual = django_filters.NumberFilter(field_name="harga_jual", lookup_expr='gte')
+    max_harga_jual = django_filters.NumberFilter(field_name="harga_jual", lookup_expr='lte')
     min_berat = django_filters.NumberFilter(field_name="berat", lookup_expr='gte')
     max_berat = django_filters.NumberFilter(field_name="berat", lookup_expr='lte')
-    min_umur = django_filters.NumberFilter(field_name="umur", lookup_expr='gte')
-    max_umur = django_filters.NumberFilter(field_name="umur", lookup_expr='lte')
+    min_durasi = django_filters.NumberFilter(field_name="durasi_hari", lookup_expr='gte')
+    max_durasi = django_filters.NumberFilter(field_name="durasi_hari", lookup_expr='lte')
 
     class Meta:
         model = Invest
-        fields = ['nama', 'jenis', 'status_investernak', 'id_invest']
+        fields = ['nama_paket', 'jenis', 'status_investernak', 'id_invest']

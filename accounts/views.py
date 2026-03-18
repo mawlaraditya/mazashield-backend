@@ -123,6 +123,7 @@ class AdminUserListView(generics.ListAPIView):
     serializer_class = UserListSerializer
 
     def get_queryset(self):
+        # Show ALL users including soft-deleted (nonaktif), no deleted_at filter
         queryset = User.objects.all().order_by('-created_at')
         account_type = self.request.query_params.get('type')
         
@@ -192,10 +193,15 @@ class AdminUserUpdateView(APIView):
             return Response({'error': 'User tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
 
 class AdminUserExportView(APIView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsMarketingOrSuperAdmin]
 
     def get(self, request):
         export_type = request.query_params.get('type', 'external')
+        
+        # Marketing can only export external accounts
+        if request.user.role == 'Marketing' and export_type == 'internal':
+            return Response({'error': 'Anda tidak memiliki izin mengekspor akun internal'}, status=status.HTTP_403_FORBIDDEN)
+
         if export_type == 'internal':
             roles = ['SuperAdmin', 'Marketing', 'Finance', 'CEO', 'Komisaris']
             filename = f"internal_{timezone.now().strftime('%Y%m%d')}.csv"
@@ -203,6 +209,7 @@ class AdminUserExportView(APIView):
             roles = ['Customer', 'Investor']
             filename = f"external_{timezone.now().strftime('%Y%m%d')}.csv"
 
+        # Include all users (active AND nonaktif/soft-deleted)
         users = User.objects.filter(role__in=roles).order_by('-created_at')
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

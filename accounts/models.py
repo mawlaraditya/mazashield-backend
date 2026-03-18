@@ -8,7 +8,7 @@ class UserManager(BaseUserManager):
         if not email:
             raise ValueError('Email wajib diisi')
         user = self.model(
-            email=self.normalize_email(email),
+            email=self.normalize_email(email).lower(),
             nama=nama,
             nomor_telepon=nomor_telepon,
             role=role,

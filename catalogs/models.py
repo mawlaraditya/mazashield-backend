@@ -1,5 +1,16 @@
+import uuid
+import datetime
 from django.db import models
 from django.utils import timezone
+
+def generate_ternak_id():
+    return f"TR-{uuid.uuid4().hex[:6].upper()}"
+
+def generate_daging_id():
+    return f"DG-{uuid.uuid4().hex[:6].upper()}"
+
+def generate_invest_id():
+    return f"INV-{uuid.uuid4().hex[:6].upper()}"
 
 class Ternak(models.Model):
     STATUS_CHOICES = [
@@ -22,12 +33,12 @@ class Ternak(models.Model):
         ('Patungan', 'Patungan'),
     ]
 
-    id_ternak = models.CharField(max_length=50, unique=True)
+    id_ternak = models.CharField(max_length=50, unique=True, default=generate_ternak_id, editable=False)
     nama = models.CharField(max_length=255)
     jenis = models.CharField(max_length=100, choices=JENIS_CHOICES, default='Sapi')
     kelas = models.CharField(max_length=20, choices=KELAS_CHOICES, null=True, blank=True)
     berat = models.DecimalField(max_digits=10, decimal_places=2)
-    tanggal_penimbangan = models.DateField(default=timezone.now)
+    tanggal_penimbangan = models.DateField(default=datetime.date.today)
     berat_target = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tanggal_lahir = models.DateField(null=True, blank=True)
     harga = models.DecimalField(max_digits=15, decimal_places=2)
@@ -64,7 +75,7 @@ class Daging(models.Model):
         ('Pre Order', 'Pre Order'),
     ]
 
-    id_daging = models.CharField(max_length=50, unique=True)
+    id_daging = models.CharField(max_length=50, unique=True, default=generate_daging_id, editable=False)
     nama = models.CharField(max_length=255)
     bagian = models.CharField(max_length=100)
     harga_per_kg = models.DecimalField(max_digits=15, decimal_places=2)
@@ -96,7 +107,7 @@ class Invest(models.Model):
         ('Closed', 'Closed'),
     ]
 
-    id_invest = models.CharField(max_length=50, unique=True)
+    id_invest = models.CharField(max_length=50, unique=True, default=generate_invest_id, editable=False)
     nama_paket = models.CharField(max_length=255)
     harga_sapi = models.DecimalField(max_digits=15, decimal_places=2)
     biaya_pemeliharaan = models.DecimalField(max_digits=15, decimal_places=2, default=0)
