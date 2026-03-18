@@ -29,14 +29,16 @@ class TernakInternalListCreateView(generics.ListCreateAPIView):
         return TernakSerializer
 
     def create(self, request, *args, **kwargs):
-        serializer = TernakCreateSerializer(data=request.data)
+        # Strip id_ternak from incoming data — always auto-generated
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        data.pop('id_ternak', None)
+        
+        serializer = TernakCreateSerializer(data=data)
         if serializer.is_valid():
             obj = serializer.save()
             return Response(TernakSerializer(obj, context={'request': request}).data, status=status.HTTP_201_CREATED)
         
         errors = serializer.errors
-        if 'id_ternak' in errors and any('sudah' in str(e) for e in errors['id_ternak']):
-            return Response(errors, status=status.HTTP_409_CONFLICT)
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
 class TernakInternalDetailView(APIView):
@@ -81,15 +83,15 @@ class DagingInternalListCreateView(generics.ListCreateAPIView):
         return DagingSerializer
 
     def create(self, request, *args, **kwargs):
-        serializer = DagingCreateSerializer(data=request.data)
+        # Strip id_daging from incoming data — always auto-generated
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        data.pop('id_daging', None)
+        
+        serializer = DagingCreateSerializer(data=data)
         if serializer.is_valid():
             obj = serializer.save()
             return Response(DagingSerializer(obj, context={'request': request}).data, status=status.HTTP_201_CREATED)
-        
-        errors = serializer.errors
-        if 'id_daging' in errors and any('sudah' in str(e) for e in errors['id_daging']):
-            return Response(errors, status=status.HTTP_409_CONFLICT)
-        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class DagingInternalDetailView(APIView):
     permission_classes = [IsMarketingOrSuperAdmin]
@@ -148,6 +150,7 @@ class InvestInternalListCreateView(generics.ListCreateAPIView):
     GET    /api/sales/invest  → Read Internal
     """
     permission_classes = [IsMarketingOrSuperAdmin]
+    filter_backends = [DjangoFilterBackend]
     filterset_class = InvestFilter
 
     def get_queryset(self):
@@ -159,17 +162,18 @@ class InvestInternalListCreateView(generics.ListCreateAPIView):
         return InvestSerializer
 
     def create(self, request, *args, **kwargs):
-        serializer = InvestCreateSerializer(data=request.data)
+        # Strip id_invest from incoming data — always auto-generated
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        data.pop('id_invest', None)
+        
+        serializer = InvestCreateSerializer(data=data)
         if serializer.is_valid():
             obj = serializer.save()
             return Response(
                 InvestSerializer(obj, context={'request': request}).data,
                 status=status.HTTP_201_CREATED
             )
-        errors = serializer.errors
-        if 'id_invest' in errors and any('sudah' in str(e) for e in errors['id_invest']):
-            return Response(errors, status=status.HTTP_409_CONFLICT)
-        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InvestInternalDetailView(APIView):
