@@ -130,7 +130,7 @@ class AdminUserListView(generics.ListAPIView):
         if account_type == 'internal':
             queryset = queryset.filter(role__in=['SuperAdmin', 'Marketing', 'Finance', 'CEO', 'Komisaris'])
         elif account_type == 'external':
-            queryset = queryset.filter(role__in=['Customer', 'Investor'])
+            queryset = queryset.filter(role__in=['Customer'])
             
         search = self.request.query_params.get('search')
         if search:
@@ -206,7 +206,7 @@ class AdminUserExportView(APIView):
             roles = ['SuperAdmin', 'Marketing', 'Finance', 'CEO', 'Komisaris']
             filename = f"internal_{timezone.now().strftime('%Y%m%d')}.csv"
         else:
-            roles = ['Customer', 'Investor']
+            roles = ['Customer']
             filename = f"external_{timezone.now().strftime('%Y%m%d')}.csv"
 
         # Include all users (active AND nonaktif/soft-deleted)

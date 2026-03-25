@@ -59,9 +59,9 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
         if value not in VALID_ROLES:
             raise serializers.ValidationError(f'Role tidak valid. Pilihan: {VALID_ROLES}')
         
-        # 1. Marketing can ONLY create Customer or Investor (based on latest refactor)
-        if request_user.role == 'Marketing' and value not in ['Customer', 'Investor']:
-            raise serializers.ValidationError('Marketing hanya dapat membuat akun Customer atau Investor')
+        # 1. Marketing can ONLY create Customer (based on latest refactor)
+        if request_user.role == 'Marketing' and value not in ['Customer']:
+            raise serializers.ValidationError('Marketing hanya dapat membuat akun Customer')
         
         # 2. CEO dan Komisaris itu 1 orang (mencegah duplikasi peran jika sudah ada)
         if value in ['CEO', 'Komisaris']:

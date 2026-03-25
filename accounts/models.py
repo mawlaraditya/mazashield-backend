@@ -38,7 +38,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         ('CEO', 'CEO'),
         ('Komisaris', 'Komisaris'),
         ('Customer', 'Customer'),
-        ('Investor', 'Investor'),
     ]
 
     nama = models.CharField(max_length=255)
