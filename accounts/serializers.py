@@ -17,6 +17,14 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Email sudah terdaftar')
         return value.lower()
 
+    def validate_nomor_telepon(self, value):
+        import re
+        if not re.match(r'^\d+$', value):
+            raise serializers.ValidationError('Nomor telepon hanya boleh berisi angka')
+        if len(value) > 13:
+            raise serializers.ValidationError('Nomor telepon maksimal 13 digit')
+        return value
+
     def create(self, validated_data):
         return User.objects.create_user(
             email=validated_data['email'],
@@ -75,6 +83,14 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Email sudah terdaftar')
         return value.lower()
 
+    def validate_nomor_telepon(self, value):
+        import re
+        if not re.match(r'^\d+$', value):
+            raise serializers.ValidationError('Nomor telepon hanya boleh berisi angka')
+        if len(value) > 13:
+            raise serializers.ValidationError('Nomor telepon maksimal 13 digit')
+        return value
+
     def create(self, validated_data):
         # Generate random password
         random_pwd = get_random_string(length=12)
@@ -93,6 +109,14 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['nama', 'nomor_telepon', 'email', 'role']
+
+    def validate_nomor_telepon(self, value):
+        import re
+        if not re.match(r'^\d+$', value):
+            raise serializers.ValidationError('Nomor telepon hanya boleh berisi angka')
+        if len(value) > 13:
+            raise serializers.ValidationError('Nomor telepon maksimal 13 digit')
+        return value
 
     def update(self, instance, validated_data):
         instance.nama = validated_data.get('nama', instance.nama)
@@ -135,6 +159,14 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['nama', 'nomor_telepon', 'role', 'is_active']
+
+    def validate_nomor_telepon(self, value):
+        import re
+        if not re.match(r'^\d+$', value):
+            raise serializers.ValidationError('Nomor telepon hanya boleh berisi angka')
+        if len(value) > 13:
+            raise serializers.ValidationError('Nomor telepon maksimal 13 digit')
+        return value
 
     def update(self, instance, validated_data):
         if instance.deleted_at is not None:

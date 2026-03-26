@@ -27,6 +27,11 @@ class TernakCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Harga harus lebih dari 0')
         return value
 
+    def validate_tanggal_lahir(self, value):
+        if value and value > timezone.now().date():
+            raise serializers.ValidationError("Tanggal lahir tidak boleh di masa depan")
+        return value
+
 class TernakUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ternak
@@ -53,6 +58,11 @@ class TernakUpdateSerializer(serializers.ModelSerializer):
     def validate_harga(self, value):
         if value <= 0:
             raise serializers.ValidationError('Harga harus lebih dari 0')
+        return value
+
+    def validate_tanggal_lahir(self, value):
+        if value and value > timezone.now().date():
+            raise serializers.ValidationError("Tanggal lahir tidak boleh di masa depan")
         return value
 
 class TernakSerializer(serializers.ModelSerializer):
