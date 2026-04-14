@@ -117,7 +117,8 @@ class ChangePasswordView(APIView):
             return Response({'message': 'Password berhasil diubah'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# Admin User Management
+
+# ─── PBI-4 + PBI-7: Admin User Management ────────────────────────────────────
 class AdminUserListView(generics.ListAPIView):
     permission_classes = [IsMarketingOrSuperAdmin]
     serializer_class = UserListSerializer
@@ -140,18 +141,8 @@ class AdminUserListView(generics.ListAPIView):
                 Q(nomor_telepon__icontains=search)
             )
 
-        status_param = self.request.query_params.get('status')
-        if status_param == 'Aktif':
-            queryset = queryset.filter(is_active=True)
-        elif status_param == 'Nonaktif':
-            queryset = queryset.filter(is_active=False)
 
-        role_param = self.request.query_params.get('role')
-        if role_param and role_param != 'all':
-            queryset = queryset.filter(role=role_param)
-
-        return queryset
-
+# ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
 class AdminUserDeleteView(APIView):
     permission_classes = [IsSuperAdmin]
 
