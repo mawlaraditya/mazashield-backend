@@ -11,6 +11,7 @@ urlpatterns = [
 
     # ── Catalogs & Sales ──────────────────────────────────────────────────────
     path('api/sales/', include('catalogs.urls.internal_urls')),
+    path('api/sales/', include('sales.urls')),
     path('api/', include('catalogs.urls.public_urls')),
 ]
 
