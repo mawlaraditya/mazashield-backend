@@ -159,3 +159,144 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
         except Pesanan.DoesNotExist:
             from django.http import Http404
             raise Http404("Pesanan tidak ditemukan.")
+
+class OrderMazdagingViewSet(viewsets.ModelViewSet):
+    """
+    PBI-27, PBI-28, PBI-29: Manajemen Pesanan Mazdaging
+    """
+    queryset = PesananDaging.objects.filter(deleted_at__isnull=True)
+    serializer_class = PesananDagingSerializer
+    permission_classes = [IsSuperAdminOrMarketing]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['status_pesanan']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        """
+        PBI-29: Read Internal Mazdaging (Filter by status & created_at range)
+        """
+        queryset = super().get_queryset()
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date and end_date:
+            queryset = queryset.filter(created_at__range=[start_date, end_date])
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        """
+        PBI-27: Create Order Mazdaging
+        """
+        serializer = OrderDagingCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        id_customer = serializer.validated_data['id_customer']
+        items_data = serializer.validated_data['items']
+        catatan = serializer.validated_data.get('catatan', '')
+
+        try:
+            customer = User.objects.get(id=id_customer)
+        except User.DoesNotExist:
+            return Response({"detail": "Customer tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with transaction.atomic():
+                # Validate meat items
+                items_to_create = []
+                total_tagihan = 0
+                for item_data in items_data:
+                    id_daging = item_data['id_daging']
+                    berat_pesanan_kg = float(item_data['berat_pesanan_kg'])
+                    
+                    try:
+                        daging = Daging.objects.select_for_update().get(id_daging=id_daging)
+                        if daging.status_daging not in ['Tersedia', 'Pre Order'] or daging.deleted_at is not None:
+                            return Response({"detail": f"Daging {id_daging} tidak tersedia atau Pre Order."}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        subtotal = float(daging.harga_per_kg) * berat_pesanan_kg
+                        items_to_create.append({
+                            'daging': daging,
+                            'berat': berat_pesanan_kg,
+                            'harga_per_kg': daging.harga_per_kg,
+                            'subtotal': subtotal
+                        })
+                        total_tagihan += subtotal
+                    except Daging.DoesNotExist:
+                        return Response({"detail": f"Daging {id_daging} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Create PesananDaging
+                pesanan = PesananDaging.objects.create(
+                    customer=customer,
+                    catatan=catatan,
+                    status_pesanan='Diproses',
+                    updated_at=timezone.now()
+                )
+
+                # Create OrderItems
+                for item in items_to_create:
+                    OrderItemDaging.objects.create(
+                        pesanan=pesanan,
+                        daging=item['daging'],
+                        berat_pesanan_kg=item['berat'],
+                        harga_per_kg=item['harga_per_kg'],
+                        subtotal_item=item['subtotal']
+                    )
+
+                # Create PembayaranDaging
+                PembayaranDaging.objects.create(
+                    pesanan=pesanan,
+                    tagihan=total_tagihan,
+                    menunggu_persetujuan=0,
+                    sudah_dibayar=0
+                )
+
+                return Response(PesananDagingSerializer(pesanan).data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        """
+        PBI-28 : Update Status Pesanan Mazdaging
+        """
+        instance = self.get_object_or_404_by_id(kwargs.get('pk'))
+        
+        # PBI-28: Jika pesanan sudah berstatus Selesai atau Dibatalkan → return 400
+        if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
+            return Response({"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."}, status=status.HTTP_400_BAD_REQUEST)
+
+        new_status = request.data.get('status_pesanan', instance.status_pesanan)
+        catatan = request.data.get('catatan', instance.catatan)
+
+        if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
+            return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Transition validation: Diproses → Selesai OR Diproses → Dibatalkan
+        if instance.status_pesanan != 'Diproses' and new_status != instance.status_pesanan:
+             return Response({"detail": "Transisi status tidak diperbolehkan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                instance.status_pesanan = new_status
+                instance.catatan = catatan
+                instance.updated_at = timezone.now()
+                instance.updated_by = request.user
+                
+                if new_status == 'Selesai':
+                    pembayaran = instance.pembayaran
+                    pembayaran.sudah_dibayar = pembayaran.tagihan
+                    pembayaran.menunggu_persetujuan = 0
+                    pembayaran.save()
+
+                instance.save()
+                return Response(PesananDagingSerializer(instance).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def get_object_or_404_by_id(self, pk):
+        try:
+            return PesananDaging.objects.get(pk=pk, deleted_at__isnull=True)
+        except PesananDaging.DoesNotExist:
+            from django.http import Http404
+            raise Http404("Pesanan tidak ditemukan.")

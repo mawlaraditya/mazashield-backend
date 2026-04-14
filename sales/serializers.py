@@ -74,3 +74,68 @@ class OrderUpdateSerializer(serializers.ModelSerializer):
         if value not in ['Diproses', 'Selesai', 'Dibatalkan']:
             raise serializers.ValidationError("Status pesanan tidak valid.")
         return value
+    
+# MAZDAGING SERIALIZERS
+class OrderItemDagingSerializer(serializers.ModelSerializer):
+    id_daging = serializers.CharField(source='daging.id_daging')
+    nama = serializers.CharField(source='daging.nama')
+    bagian = serializers.CharField(source='daging.bagian')
+    
+    class Meta:
+        model = OrderItemDaging
+        fields = ['id_daging', 'nama', 'bagian', 'berat_pesanan_kg', 'harga_per_kg', 'subtotal_item']
+
+class PesananDagingSerializer(serializers.ModelSerializer):
+    """
+    PBI-27, PBI-29 (Anne): Serializer untuk Read & Detail Pesanan Mazdaging
+    """
+    data_customer = serializers.SerializerMethodField()
+    daftar_item = OrderItemDagingSerializer(source='items', many=True, read_only=True)
+    total_item = serializers.SerializerMethodField()
+    tagihan = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
+    menunggu_persetujuan = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
+    sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
+    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+
+    class Meta:
+        model = PesananDaging
+        fields = [
+            'id_pesanan', 'data_customer', 'daftar_item', 'total_item', 
+            'tagihan', 'menunggu_persetujuan', 'sudah_dibayar', 
+            'status_pesanan', 'catatan', 'created_at', 'updated_at'
+        ]
+    
+    def get_data_customer(self, obj):
+        return {
+            'nama': obj.customer.nama,
+            'no_telp': obj.customer.nomor_telepon,
+            'email': obj.customer.email
+        }
+    
+    def get_total_item(self, obj):
+        return obj.items.count()
+
+class OrderDagingCreateSerializer(serializers.Serializer):
+    """
+    PBI-27 (Anne): Serializer untuk Create Pesanan Mazdaging
+    """
+    id_customer = serializers.IntegerField()
+    items = serializers.ListField(
+        child=serializers.DictField(),
+        min_length=1
+    )
+    catatan = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_items(self, value):
+        for item in value:
+            if 'id_daging' not in item or 'berat_pesanan_kg' not in item:
+                raise serializers.ValidationError("Setiap item harus memuat id_daging dan berat_pesanan_kg.")
+            if not isinstance(item['berat_pesanan_kg'], (int, float, str)):
+                raise serializers.ValidationError("berat_pesanan_kg harus numerik.")
+            try:
+                weight = float(item['berat_pesanan_kg'])
+                if weight <= 0:
+                    raise serializers.ValidationError("berat_pesanan_kg harus lebih besar dari 0.")
+            except ValueError:
+                raise serializers.ValidationError("berat_pesanan_kg harus numerik.")
+        return value
