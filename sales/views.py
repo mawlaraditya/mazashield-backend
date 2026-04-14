@@ -31,6 +31,17 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
 
+    def get_queryset(self):
+        """
+        PBI-25: Read Internal Mazdafarm (Filter by status & created_at range)
+        """
+        queryset = super().get_queryset()
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date and end_date:
+            queryset = queryset.filter(created_at__range=[start_date, end_date])
+        return queryset
+
     def create(self, request, *args, **kwargs):
         """
         PBI-23: Create Order Mazdafarm
