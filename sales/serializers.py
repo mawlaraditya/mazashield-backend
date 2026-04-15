@@ -1,7 +1,7 @@
 from rest_framework import serializers
-from .models import Pesanan, OrderItem, Pembayaran, PesananDaging, OrderItemDaging, PembayaranDaging
+from .models import Pesanan, OrderItem, Pembayaran, PesananDaging, OrderItemDaging, PembayaranDaging, PesananInvest, OrderItemInvest, PembayaranInvest
 from accounts.models import User
-from catalogs.models import Ternak, Daging
+from catalogs.models import Ternak, Daging, Invest
 
 class OrderItemSerializer(serializers.ModelSerializer):
     id_ternak = serializers.CharField(source='ternak.id_ternak')
@@ -138,4 +138,67 @@ class OrderDagingCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError("berat_pesanan_kg harus lebih besar dari 0.")
             except ValueError:
                 raise serializers.ValidationError("berat_pesanan_kg harus numerik.")
+        return value
+
+
+# ── INVEST ORDER SERIALIZERS ────────────────────────────────────────────────
+class OrderItemInvestSerializer(serializers.ModelSerializer):
+    id_invest = serializers.CharField(source='invest.id_invest')
+    nama_paket = serializers.CharField(source='invest.nama_paket')
+    jenis = serializers.CharField(source='invest.jenis')
+    berat = serializers.DecimalField(source='invest.berat', max_digits=10, decimal_places=2, allow_null=True)
+    harga_jual = serializers.DecimalField(source='invest.harga_jual', max_digits=15, decimal_places=2)
+    roi_persen = serializers.DecimalField(source='invest.roi_persen', max_digits=10, decimal_places=2)
+    status_investernak = serializers.CharField(source='invest.status_investernak')
+
+    class Meta:
+        model = OrderItemInvest
+        fields = ['id_invest', 'nama_paket', 'jenis', 'berat', 'harga_sapi', 'harga_jual', 'roi_persen', 'status_investernak']
+
+
+class PesananInvestSerializer(serializers.ModelSerializer):
+    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    data_customer = serializers.SerializerMethodField()
+    daftar_invest = OrderItemInvestSerializer(source='items', many=True, read_only=True)
+    total_item = serializers.SerializerMethodField()
+    tagihan = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
+    menunggu_persetujuan = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
+    sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = PesananInvest
+        fields = [
+            'id_pesanan', 'data_customer', 'daftar_invest', 'total_item',
+            'tagihan', 'menunggu_persetujuan', 'sudah_dibayar',
+            'status_pesanan', 'catatan', 'created_at', 'updated_at',
+        ]
+
+    def get_data_customer(self, obj):
+        return {
+            'nama': obj.customer.nama,
+            'no_telp': obj.customer.nomor_telepon,
+            'email': obj.customer.email,
+        }
+
+    def get_total_item(self, obj):
+        return obj.items.count()
+
+
+class OrderInvestCreateSerializer(serializers.Serializer):
+    id_customer = serializers.IntegerField()
+    items = serializers.ListField(
+        child=serializers.CharField(),
+        min_length=1
+    )
+    catatan = serializers.CharField(required=False, allow_blank=True)
+
+
+class OrderInvestUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PesananInvest
+        fields = ['status_pesanan', 'catatan']
+
+    def validate_status_pesanan(self, value):
+        if value not in ['Diproses', 'Selesai', 'Dibatalkan']:
+            raise serializers.ValidationError("Status pesanan tidak valid.")
         return value

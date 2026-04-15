@@ -154,6 +154,7 @@ class AdminUserListView(generics.ListAPIView):
                 Q(email__icontains=search) | 
                 Q(nomor_telepon__icontains=search)
             )
+        return queryset
 
 
 # ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
