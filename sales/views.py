@@ -4,13 +4,14 @@ from rest_framework.decorators import action
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Pesanan, OrderItem, Pembayaran, PesananDaging, OrderItemDaging, PembayaranDaging
+from .models import Pesanan, OrderItem, Pembayaran, PesananDaging, OrderItemDaging, PembayaranDaging, PesananInvest, OrderItemInvest, PembayaranInvest
 from .serializers import (
     PesananSerializer, OrderCreateSerializer, OrderUpdateSerializer,
-    PesananDagingSerializer, OrderDagingCreateSerializer
+    PesananDagingSerializer, OrderDagingCreateSerializer,
+    PesananInvestSerializer, OrderInvestCreateSerializer, OrderInvestUpdateSerializer,
 )
 from accounts.models import User
-from catalogs.models import Ternak, Daging
+from catalogs.models import Ternak, Daging, Invest
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from django.db.models import Q
@@ -298,5 +299,149 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         try:
             return PesananDaging.objects.get(pk=pk, deleted_at__isnull=True)
         except PesananDaging.DoesNotExist:
+            from django.http import Http404
+            raise Http404("Pesanan tidak ditemukan.")
+
+
+class OrderInvestViewSet(viewsets.ModelViewSet):
+    """
+    Manajemen Pesanan Invest Ternak
+    POST   /api/sales/order/invest/         → Create order
+    GET    /api/sales/order/invest/         → List orders (filter, pagination)
+    PUT    /api/sales/order/invest/{pk}/    → Update status
+    """
+    queryset = PesananInvest.objects.filter(deleted_at__isnull=True)
+    serializer_class = PesananInvestSerializer
+    permission_classes = [IsSuperAdminOrMarketing]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['status_pesanan']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related(
+            'customer', 'pembayaran'
+        ).prefetch_related(
+            'items__invest'
+        )
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date and end_date:
+            queryset = queryset.filter(created_at__range=[start_date, end_date])
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        serializer = OrderInvestCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        id_customer = serializer.validated_data['id_customer']
+        daftar_id_invest = serializer.validated_data['items']
+        catatan = serializer.validated_data.get('catatan', '')
+
+        try:
+            customer = User.objects.get(id=id_customer)
+        except User.DoesNotExist:
+            return Response({"detail": "Customer tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with transaction.atomic():
+                invests = []
+                total_tagihan = 0
+                for iid in daftar_id_invest:
+                    try:
+                        invest = Invest.objects.select_for_update().get(id_invest=iid)
+                    except Invest.DoesNotExist:
+                        return Response({"detail": f"Invest {iid} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
+
+                    if invest.deleted_at is not None:
+                        return Response({"detail": f"Invest {iid} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
+
+                    if invest.status_investernak != 'Open':
+                        return Response(
+                            {"detail": f"Invest {iid} tidak tersedia (status: {invest.status_investernak})."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    invests.append(invest)
+                    total_tagihan += invest.harga_sapi
+
+                pesanan = PesananInvest.objects.create(
+                    customer=customer,
+                    catatan=catatan,
+                    status_pesanan='Diproses',
+                    updated_at=None,
+                )
+
+                for invest in invests:
+                    OrderItemInvest.objects.create(
+                        pesanan=pesanan,
+                        invest=invest,
+                        harga_sapi=invest.harga_sapi,
+                    )
+                    invest.status_investernak = 'Ongoing'
+                    invest.save()
+
+                PembayaranInvest.objects.create(
+                    pesanan=pesanan,
+                    tagihan=total_tagihan,
+                    menunggu_persetujuan=0,
+                    sudah_dibayar=0,
+                )
+
+                return Response(PesananInvestSerializer(pesanan).data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        instance = self._get_pesanan_or_404(kwargs.get('pk'))
+
+        if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
+            return Response(
+                {"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        new_status = request.data.get('status_pesanan', instance.status_pesanan)
+        catatan = request.data.get('catatan', instance.catatan)
+
+        if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
+            return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if instance.status_pesanan != 'Diproses' and new_status != instance.status_pesanan:
+            return Response({"detail": "Transisi status tidak diperbolehkan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                instance.status_pesanan = new_status
+                instance.catatan = catatan
+                instance.updated_at = timezone.now()
+                instance.updated_by = request.user
+                instance.save()
+
+                items = instance.items.all()
+                if new_status == 'Selesai':
+                    pembayaran = instance.pembayaran
+                    pembayaran.sudah_dibayar = pembayaran.tagihan
+                    pembayaran.menunggu_persetujuan = 0
+                    pembayaran.save()
+                    for item in items:
+                        item.invest.status_investernak = 'Closed'
+                        item.invest.save()
+                elif new_status == 'Dibatalkan':
+                    for item in items:
+                        item.invest.status_investernak = 'Open'
+                        item.invest.save()
+
+                return Response(PesananInvestSerializer(instance).data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _get_pesanan_or_404(self, pk):
+        try:
+            return PesananInvest.objects.get(pk=pk, deleted_at__isnull=True)
+        except PesananInvest.DoesNotExist:
             from django.http import Http404
             raise Http404("Pesanan tidak ditemukan.")
