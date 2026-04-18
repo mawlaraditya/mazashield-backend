@@ -4,21 +4,41 @@ from rest_framework.decorators import action
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Pesanan, OrderItem, Pembayaran, PesananDaging, OrderItemDaging, PembayaranDaging, PesananInvest, OrderItemInvest, PembayaranInvest
+from .models import (
+    Pesanan, OrderItem, Pembayaran, 
+    PesananDaging, OrderItemDaging, PembayaranDaging, 
+    PesananInvest, OrderItemInvest, PembayaranInvest,
+    RiwayatPembayaran
+)
 from .serializers import (
     PesananSerializer, OrderCreateSerializer, OrderUpdateSerializer,
     PesananDagingSerializer, OrderDagingCreateSerializer,
     PesananInvestSerializer, OrderInvestCreateSerializer, OrderInvestUpdateSerializer,
+    RiwayatPembayaranSerializer
 )
 from accounts.models import User
 from catalogs.models import Ternak, Daging, Invest
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from django.db.models import Q
+from rest_framework.views import APIView
+from django.contrib.contenttypes.models import ContentType
+import decimal
 
 class IsSuperAdminOrMarketing(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['SuperAdmin', 'Marketing']
+        # Finance and CEO can only read (GET). Marketing and SuperAdmin can do anything.
+        if request.user.is_authenticated:
+            if request.user.role in ['SuperAdmin', 'Marketing']:
+                return True
+            if request.user.role in ['Finance', 'CEO', 'Komisaris'] and request.method in permissions.SAFE_METHODS:
+                return True
+        return False
+
+
+class IsFinance(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role in ['Finance', 'SuperAdmin']
 
 class OrderMazdafarmViewSet(viewsets.ModelViewSet):
     """
@@ -445,3 +465,144 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         except PesananInvest.DoesNotExist:
             from django.http import Http404
             raise Http404("Pesanan tidak ditemukan.")
+
+# ── PAYMENT MANAGEMENT (PBI-35, PBI-36) ───────────────────────────────────
+
+class PaymentUpdateView(APIView):
+    permission_classes = [IsSuperAdminOrMarketing]
+
+    def put(self, request, id_pesanan):
+        # 1. Validate mandatory fields
+        required_fields = ['nominal_pembayaran', 'bank_pengirim', 'nomor_rekening_pengirim', 'tanggal_transfer', 'waktu_transfer']
+        for field in required_fields:
+            if field not in request.data:
+                return Response({"detail": f"Field {field} wajib diisi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            nominal = decimal.Decimal(str(request.data['nominal_pembayaran']))
+        except (ValueError, decimal.InvalidOperation):
+            return Response({"detail": "Nominal pembayaran tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if nominal <= 0:
+            return Response({"detail": "Nominal pembayaran wajib > 0."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Find order and associated pembayaran
+        order_type_str = request.data.get('order_type')
+        if not order_type_str:
+            return Response({"detail": "Field order_type wajib diisi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        order = None
+        pembayaran = None
+        content_type = None
+
+        model_map = {
+            'pesanan': (Pesanan, 'pembayaran'),
+            'pesanandaging': (PesananDaging, 'pembayaran'),
+            'pesananinvest': (PesananInvest, 'pembayaran')
+        }
+
+        if order_type_str not in model_map:
+             return Response({"detail": "order_type tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        model, rel_name = model_map[order_type_str]
+
+        try:
+            obj = model.objects.get(pk=id_pesanan, deleted_at__isnull=True)
+            if hasattr(obj, rel_name):
+                order = obj
+                pembayaran = getattr(obj, rel_name)
+                content_type = ContentType.objects.get_for_model(model)
+        except model.DoesNotExist:
+            pass
+
+
+        if not order:
+            return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 3. Validate order status
+        if order.status_pesanan == 'Dibatalkan':
+            return Response({"detail": "Pesanan sudah dibatalkan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Validate nominal <= tagihan
+        if nominal > pembayaran.tagihan:
+            return Response({"detail": "Nominal melebihi sisa tagihan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                # 5. Create RiwayatPembayaran
+                riwayat = RiwayatPembayaran.objects.create(
+                    content_type=content_type,
+                    object_id=order.id,
+                    nominal_pembayaran=nominal,
+                    bank_pengirim=request.data['bank_pengirim'],
+                    nomor_rekening_pengirim=request.data['nomor_rekening_pengirim'],
+                    tanggal_transfer=request.data['tanggal_transfer'],
+                    waktu_transfer=request.data['waktu_transfer'],
+                    catatan=request.data.get('catatan', ''),
+                    status='Menunggu Verifikasi',
+                    created_by=request.user
+                )
+
+                # 6. Update Pembayaran fields
+                pembayaran.menunggu_persetujuan += nominal
+                pembayaran.tagihan -= nominal
+                pembayaran.save()
+
+                return Response({"detail": "Pembayaran berhasil diinput."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class PaymentVerifyView(APIView):
+    permission_classes = [IsFinance]
+
+    def put(self, request, payment_id):
+        # 1. Find RiwayatPembayaran
+        try:
+            riwayat = RiwayatPembayaran.objects.get(pk=payment_id)
+        except RiwayatPembayaran.DoesNotExist:
+            return Response({"detail": "Data pembayaran tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        if riwayat.status != 'Menunggu Verifikasi':
+            return Response({"detail": "Pembayaran ini sudah diverifikasi."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 2. Validate decisions
+        keputusan = request.data.get('keputusan')
+        if keputusan not in ['Diterima', 'Ditolak']:
+            return Response({"detail": "Keputusan wajib Diterima atau Ditolak."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Get associated pembayaran
+        order = riwayat.content_object
+        pembayaran = order.pembayaran
+
+        try:
+            with transaction.atomic():
+                if keputusan == 'Diterima':
+                    pembayaran.sudah_dibayar += riwayat.nominal_pembayaran
+                    pembayaran.menunggu_persetujuan -= riwayat.nominal_pembayaran
+                    riwayat.status = 'Diterima'
+                else:
+                    pembayaran.tagihan += riwayat.nominal_pembayaran
+                    pembayaran.menunggu_persetujuan -= riwayat.nominal_pembayaran
+                    riwayat.status = 'Ditolak'
+                
+                pembayaran.save()
+                
+                riwayat.verified_at = timezone.now()
+                riwayat.verified_by = request.user
+                riwayat.catatan_verifikasi = request.data.get('catatan_verifikasi', '')
+                riwayat.save()
+
+                return Response({"detail": f"Pembayaran berhasil {keputusan}."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class RiwayatPembayaranViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = RiwayatPembayaran.objects.all()
+    serializer_class = RiwayatPembayaranSerializer
+    permission_classes = [IsFinance]
+
+    def get_queryset(self):
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            return self.queryset.filter(status=status_filter)
+        return self.queryset

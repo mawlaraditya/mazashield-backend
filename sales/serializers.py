@@ -1,5 +1,10 @@
 from rest_framework import serializers
-from .models import Pesanan, OrderItem, Pembayaran, PesananDaging, OrderItemDaging, PembayaranDaging, PesananInvest, OrderItemInvest, PembayaranInvest
+from .models import (
+    Pesanan, OrderItem, Pembayaran, 
+    PesananDaging, OrderItemDaging, PembayaranDaging, 
+    PesananInvest, OrderItemInvest, PembayaranInvest,
+    RiwayatPembayaran
+)
 from accounts.models import User
 from catalogs.models import Ternak, Daging, Invest
 
@@ -29,12 +34,30 @@ class PesananSerializer(serializers.ModelSerializer):
     sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
     id_pesanan = serializers.IntegerField(source='id', read_only=True)
 
+    log_pembayaran = serializers.SerializerMethodField()
+
     class Meta:
         model = Pesanan
         fields = [
             'id_pesanan', 'data_customer', 'daftar_ternak', 'total_item', 
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar', 
-            'status_pesanan', 'catatan', 'created_at', 'updated_at'
+            'status_pesanan', 'catatan', 'created_at', 'updated_at', 'log_pembayaran'
+        ]
+    
+    def get_log_pembayaran(self, obj):
+        from django.contrib.contenttypes.models import ContentType
+        ctype = ContentType.objects.get_for_model(obj)
+        riwayat = RiwayatPembayaran.objects.filter(content_type=ctype, object_id=obj.id).order_by('-created_at')
+        # We need a basic dictionary list without triggering circular imports
+        return [
+            {
+                'id': r.id,
+                'nominal_pembayaran': r.nominal_pembayaran,
+                'bank_pengirim': r.bank_pengirim,
+                'status': r.status,
+                'catatan_verifikasi': r.catatan_verifikasi,
+                'created_at': r.created_at,
+            } for r in riwayat
         ]
     
     def get_data_customer(self, obj):
@@ -97,12 +120,29 @@ class PesananDagingSerializer(serializers.ModelSerializer):
     sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
     id_pesanan = serializers.IntegerField(source='id', read_only=True)
 
+    log_pembayaran = serializers.SerializerMethodField()
+
     class Meta:
         model = PesananDaging
         fields = [
             'id_pesanan', 'data_customer', 'daftar_item', 'total_item', 
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar', 
-            'status_pesanan', 'catatan', 'created_at', 'updated_at'
+            'status_pesanan', 'catatan', 'created_at', 'updated_at', 'log_pembayaran'
+        ]
+    
+    def get_log_pembayaran(self, obj):
+        from django.contrib.contenttypes.models import ContentType
+        ctype = ContentType.objects.get_for_model(obj)
+        riwayat = RiwayatPembayaran.objects.filter(content_type=ctype, object_id=obj.id).order_by('-created_at')
+        return [
+            {
+                'id': r.id,
+                'nominal_pembayaran': r.nominal_pembayaran,
+                'bank_pengirim': r.bank_pengirim,
+                'status': r.status,
+                'catatan_verifikasi': r.catatan_verifikasi,
+                'created_at': r.created_at,
+            } for r in riwayat
         ]
     
     def get_data_customer(self, obj):
@@ -165,12 +205,29 @@ class PesananInvestSerializer(serializers.ModelSerializer):
     menunggu_persetujuan = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
     sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
 
+    log_pembayaran = serializers.SerializerMethodField()
+
     class Meta:
         model = PesananInvest
         fields = [
             'id_pesanan', 'data_customer', 'daftar_invest', 'total_item',
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar',
-            'status_pesanan', 'catatan', 'created_at', 'updated_at',
+            'status_pesanan', 'catatan', 'created_at', 'updated_at', 'log_pembayaran'
+        ]
+
+    def get_log_pembayaran(self, obj):
+        from django.contrib.contenttypes.models import ContentType
+        ctype = ContentType.objects.get_for_model(obj)
+        riwayat = RiwayatPembayaran.objects.filter(content_type=ctype, object_id=obj.id).order_by('-created_at')
+        return [
+            {
+                'id': r.id,
+                'nominal_pembayaran': r.nominal_pembayaran,
+                'bank_pengirim': r.bank_pengirim,
+                'status': r.status,
+                'catatan_verifikasi': r.catatan_verifikasi,
+                'created_at': r.created_at,
+            } for r in riwayat
         ]
 
     def get_data_customer(self, obj):
@@ -202,3 +259,28 @@ class OrderInvestUpdateSerializer(serializers.ModelSerializer):
         if value not in ['Diproses', 'Selesai', 'Dibatalkan']:
             raise serializers.ValidationError("Status pesanan tidak valid.")
         return value
+
+class RiwayatPembayaranSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    order_id = serializers.IntegerField(source='object_id', read_only=True)
+    order_type = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RiwayatPembayaran
+        fields = [
+            'id', 'order_id', 'order_type', 'customer_name', 'nominal_pembayaran', 
+            'bank_pengirim', 'nomor_rekening_pengirim', 'tanggal_transfer', 
+            'waktu_transfer', 'catatan', 'status', 'created_at', 'created_by',
+            'verified_at', 'verified_by', 'catatan_verifikasi'
+        ]
+        read_only_fields = ['created_by', 'verified_at', 'verified_by', 'status']
+
+    def get_customer_name(self, obj):
+        if obj.content_object and hasattr(obj.content_object, 'customer'):
+            return obj.content_object.customer.nama
+        return None
+
+    def get_order_type(self, obj):
+        if obj.content_type:
+            return obj.content_type.model
+        return None
