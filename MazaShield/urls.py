@@ -9,9 +9,10 @@ urlpatterns = [
     path('api/', include('accounts.urls.profile_urls')),
     path('api/admin/', include('accounts.urls.admin_urls')),
 
-    # ── Catalogs & Sales ──────────────────────────────────────────────────────
+    # ── Catalogs & Sales & Finance ────────────────────────────────────────────
     path('api/sales/', include('catalogs.urls.internal_urls')),
     path('api/sales/', include('sales.urls')),
+    path('api/finance/', include('sales.finance_urls')),
     path('api/', include('catalogs.urls.public_urls')),
 ]
 
