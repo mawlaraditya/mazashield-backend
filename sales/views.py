@@ -24,16 +24,23 @@ from django.db.models import Q
 from rest_framework.views import APIView
 from django.contrib.contenttypes.models import ContentType
 import decimal
+from rest_framework.pagination import PageNumberPagination
+
+class OrderPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'limit'
+    max_page_size = 100
 
 class IsSuperAdminOrMarketing(permissions.BasePermission):
     def has_permission(self, request, view):
-        # Finance and CEO can only read (GET). Marketing and SuperAdmin can do anything.
+        # CEO and Komisaris can only read (GET). Marketing and SuperAdmin can do anything.
         if request.user.is_authenticated:
             if request.user.role in ['SuperAdmin', 'Marketing']:
                 return True
-            if request.user.role in ['Finance', 'CEO', 'Komisaris'] and request.method in permissions.SAFE_METHODS:
+            if request.user.role in ['CEO', 'Komisaris'] and request.method in permissions.SAFE_METHODS:
                 return True
         return False
+
 
 
 class IsFinance(permissions.BasePermission):
@@ -47,10 +54,12 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
     queryset = Pesanan.objects.filter(deleted_at__isnull=True)
     serializer_class = PesananSerializer
     permission_classes = [IsSuperAdminOrMarketing]
+    pagination_class = OrderPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['status_pesanan']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
+
 
     def get_queryset(self):
         """
@@ -59,9 +68,14 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
-        if start_date and end_date:
-            queryset = queryset.filter(created_at__range=[start_date, end_date])
+        
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+            
         return queryset
+
 
     def create(self, request, *args, **kwargs):
         """
@@ -78,8 +92,11 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
         # PBI-23: Jika customer tidak ditemukan → return 404 Not Found
         try:
             customer = User.objects.get(id=id_customer)
+            if customer.role != 'Customer':
+                return Response({"detail": "User yang dipilih bukan merupakan customer."}, status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
             return Response({"detail": "Customer tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
 
         try:
             with transaction.atomic():
@@ -94,15 +111,16 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                         ternaks.append(ternak)
                         total_tagihan += ternak.harga
                     except Ternak.DoesNotExist:
-                        return Response({"detail": f"Ternak {tid} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
+                        return Response({"detail": f"Ternak {tid} tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
                 # Create Pesanan
                 pesanan = Pesanan.objects.create(
                     customer=customer,
                     catatan=catatan,
                     status_pesanan='Diproses',
-                    updated_at=None
+                    updated_at=timezone.now()
                 )
+
 
                 # Create OrderItems and change cattle status
                 for ternak in ternaks:
@@ -129,39 +147,46 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
+
         """
-        PBI-24: Update Status Pesanan Mazdafarm
+        PBI-28: Update Status Pesanan Mazdafarm (Strict Validation)
         """
-        partial = kwargs.pop('partial', False)
         instance = self.get_object_or_404_by_id(kwargs.get('pk'))
         
-        # PBI-24: Jika pesanan sudah berstatus Selesai atau Dibatalkan → return 400
+        # 1. Block transition FROM Selesai/Dibatalkan
         if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
             return Response({"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = OrderUpdateSerializer(instance, data=request.data, partial=partial)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        new_status = serializer.validated_data.get('status_pesanan', instance.status_pesanan)
+        new_status = request.data.get('status_pesanan', instance.status_pesanan)
+        catatan = request.data.get('catatan', instance.catatan)
         
-        # Validation of transition
+        # 2. Status validity
+        if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
+             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Payment Validation for Selesai
         if new_status == 'Selesai':
             pembayaran = instance.pembayaran
             if pembayaran.tagihan > 0 or pembayaran.menunggu_persetujuan > 0:
-                return Response({"detail": "Masih ada sisa tagihan atau pembayaran menunggu persetujuan."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"detail": "Status tidak bisa diubah ke Selesai: Masih ada sisa tagihan atau pembayaran menunggu verifikasi finance."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
                 instance.status_pesanan = new_status
-                instance.catatan = serializer.validated_data.get('catatan', instance.catatan)
+                instance.catatan = catatan
                 instance.updated_at = timezone.now()
                 instance.updated_by = request.user
-                instance.save()
-
-                # Sync cattle status
+                
+                # Sync stock and payment logs
                 items = instance.items.all()
                 if new_status == 'Selesai':
+                    # Fill payment data (though strictly should be 0 remainder already)
+                    pembayaran = instance.pembayaran
+                    pembayaran.sudah_dibayar += (pembayaran.tagihan + pembayaran.menunggu_persetujuan)
+                    pembayaran.tagihan = 0
+                    pembayaran.menunggu_persetujuan = 0
+                    pembayaran.save()
+                    
                     for item in items:
                         item.ternak.status_ternak = 'Terjual'
                         item.ternak.save()
@@ -170,9 +195,12 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                         item.ternak.status_ternak = 'Tersedia'
                         item.ternak.save()
 
+                instance.save()
                 return Response(PesananSerializer(instance).data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
     def get_object_or_404_by_id(self, pk):
         try:
@@ -188,10 +216,12 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
     queryset = PesananDaging.objects.filter(deleted_at__isnull=True)
     serializer_class = PesananDagingSerializer
     permission_classes = [IsSuperAdminOrMarketing]
+    pagination_class = OrderPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['status_pesanan']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
+
 
     def get_queryset(self):
         """
@@ -200,9 +230,14 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
-        if start_date and end_date:
-            queryset = queryset.filter(created_at__range=[start_date, end_date])
+        
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+            
         return queryset
+
 
     def create(self, request, *args, **kwargs):
         """
@@ -218,8 +253,11 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
 
         try:
             customer = User.objects.get(id=id_customer)
+            if customer.role != 'Customer':
+                return Response({"detail": "User yang dipilih bukan merupakan customer."}, status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
             return Response({"detail": "Customer tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
 
         try:
             with transaction.atomic():
@@ -254,6 +292,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                     updated_at=timezone.now()
                 )
 
+
                 # Create OrderItems
                 for item in items_to_create:
                     OrderItemDaging.objects.create(
@@ -283,7 +322,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         """
         instance = self.get_object_or_404_by_id(kwargs.get('pk'))
         
-        # PBI-28: Jika pesanan sudah berstatus Selesai atau Dibatalkan → return 400
+        # 1. Block transition FROM Selesai/Dibatalkan
         if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
             return Response({"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -293,9 +332,11 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Transition validation: Diproses → Selesai OR Diproses → Dibatalkan
-        if instance.status_pesanan != 'Diproses' and new_status != instance.status_pesanan:
-             return Response({"detail": "Transisi status tidak diperbolehkan."}, status=status.HTTP_400_BAD_REQUEST)
+        # 2. Payment Validation for Selesai
+        if new_status == 'Selesai':
+            pembayaran = instance.pembayaran
+            if pembayaran.tagihan > 0 or pembayaran.menunggu_persetujuan > 0:
+                return Response({"detail": "Status tidak bisa diubah ke Selesai: Masih ada sisa tagihan atau pembayaran menunggu verifikasi finance."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
@@ -304,16 +345,28 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 instance.updated_at = timezone.now()
                 instance.updated_by = request.user
                 
+                items = instance.items.all()
                 if new_status == 'Selesai':
                     pembayaran = instance.pembayaran
-                    pembayaran.sudah_dibayar = pembayaran.tagihan
+                    pembayaran.sudah_dibayar += (pembayaran.tagihan + pembayaran.menunggu_persetujuan)
+                    pembayaran.tagihan = 0
                     pembayaran.menunggu_persetujuan = 0
                     pembayaran.save()
+                    
+                    # Stock logic for Daging (if any specific status needed)
+                    for item in items:
+                        item.daging.status_daging = 'Terjual'
+                        item.daging.save()
+                elif new_status == 'Dibatalkan':
+                    for item in items:
+                        item.daging.status_daging = 'Tersedia'
+                        item.daging.save()
 
                 instance.save()
                 return Response(PesananDagingSerializer(instance).data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
     def get_object_or_404_by_id(self, pk):
         try:
@@ -333,10 +386,12 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
     queryset = PesananInvest.objects.filter(deleted_at__isnull=True)
     serializer_class = PesananInvestSerializer
     permission_classes = [IsSuperAdminOrMarketing]
+    pagination_class = OrderPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['status_pesanan']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
+
 
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
@@ -346,9 +401,14 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         )
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
-        if start_date and end_date:
-            queryset = queryset.filter(created_at__range=[start_date, end_date])
+        
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+            
         return queryset
+
 
     def create(self, request, *args, **kwargs):
         serializer = OrderInvestCreateSerializer(data=request.data)
@@ -361,8 +421,11 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
 
         try:
             customer = User.objects.get(id=id_customer)
+            if customer.role != 'Customer':
+                return Response({"detail": "User yang dipilih bukan merupakan customer."}, status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
             return Response({"detail": "Customer tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
 
         try:
             with transaction.atomic():
@@ -390,8 +453,9 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                     customer=customer,
                     catatan=catatan,
                     status_pesanan='Diproses',
-                    updated_at=None,
+                    updated_at=timezone.now(),
                 )
+
 
                 for invest in invests:
                     OrderItemInvest.objects.create(
@@ -415,8 +479,12 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
+        """
+        PBI-28: Update Status Pesanan Invest Ternak
+        """
         instance = self._get_pesanan_or_404(kwargs.get('pk'))
 
+        # 1. Block transition FROM Selesai/Dibatalkan
         if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
             return Response(
                 {"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."},
@@ -429,8 +497,11 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if instance.status_pesanan != 'Diproses' and new_status != instance.status_pesanan:
-            return Response({"detail": "Transisi status tidak diperbolehkan."}, status=status.HTTP_400_BAD_REQUEST)
+        # 2. Payment Validation for Selesai
+        if new_status == 'Selesai':
+            pembayaran = instance.pembayaran
+            if pembayaran.tagihan > 0 or pembayaran.menunggu_persetujuan > 0:
+                return Response({"detail": "Status tidak bisa diubah ke Selesai: Masih ada sisa tagihan atau pembayaran menunggu verifikasi finance."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
@@ -438,14 +509,15 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                 instance.catatan = catatan
                 instance.updated_at = timezone.now()
                 instance.updated_by = request.user
-                instance.save()
-
+                
                 items = instance.items.all()
                 if new_status == 'Selesai':
                     pembayaran = instance.pembayaran
-                    pembayaran.sudah_dibayar = pembayaran.tagihan
+                    pembayaran.sudah_dibayar += (pembayaran.tagihan + pembayaran.menunggu_persetujuan)
+                    pembayaran.tagihan = 0
                     pembayaran.menunggu_persetujuan = 0
                     pembayaran.save()
+                    
                     for item in items:
                         item.invest.status_investernak = 'Closed'
                         item.invest.save()
@@ -454,10 +526,12 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                         item.invest.status_investernak = 'Open'
                         item.invest.save()
 
+                instance.save()
                 return Response(PesananInvestSerializer(instance).data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
     def _get_pesanan_or_404(self, pk):
         try:
@@ -496,10 +570,14 @@ class PaymentUpdateView(APIView):
         content_type = None
 
         model_map = {
-            'pesanan': (Pesanan, 'pembayaran'),
-            'pesanandaging': (PesananDaging, 'pembayaran'),
-            'pesananinvest': (PesananInvest, 'pembayaran')
+            'pesananternak': (Pesanan, 'pembayaran'),
+            'pesananinvest': (PesananInvest, 'pembayaran'),
+            'pesanandaging': (PesananDaging, 'pembayaran')
         }
+
+
+
+
 
         if order_type_str not in model_map:
              return Response({"detail": "order_type tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
@@ -574,16 +652,27 @@ class PaymentVerifyView(APIView):
         order = riwayat.content_object
         pembayaran = order.pembayaran
 
+        # 4. Mandatory validation: menunggu_persetujuan must have sufficient funds
+        if pembayaran.menunggu_persetujuan < riwayat.nominal_pembayaran:
+            return Response({
+                "detail": f"Data data finansial tidak sinkron: Menunggu persetujuan (Rp {pembayaran.menunggu_persetujuan}) "
+                          f"kurang dari nominal verifikasi (Rp {riwayat.nominal_pembayaran})."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             with transaction.atomic():
                 if keputusan == 'Diterima':
                     pembayaran.sudah_dibayar += riwayat.nominal_pembayaran
                     pembayaran.menunggu_persetujuan -= riwayat.nominal_pembayaran
                     riwayat.status = 'Diterima'
+                    
+                    # Logic: If tagihan is 0, this order is effectively fully paid (ready to be Selesai)
+                    ready_to_complete = (pembayaran.tagihan == 0 and pembayaran.menunggu_persetujuan == 0)
                 else:
                     pembayaran.tagihan += riwayat.nominal_pembayaran
                     pembayaran.menunggu_persetujuan -= riwayat.nominal_pembayaran
                     riwayat.status = 'Ditolak'
+                    ready_to_complete = False
                 
                 pembayaran.save()
                 
@@ -592,9 +681,14 @@ class PaymentVerifyView(APIView):
                 riwayat.catatan_verifikasi = request.data.get('catatan_verifikasi', '')
                 riwayat.save()
 
-                return Response({"detail": f"Pembayaran berhasil {keputusan}."}, status=status.HTTP_200_OK)
+                detail_msg = f"Pembayaran berhasil {keputusan}."
+                if ready_to_complete:
+                    detail_msg += " Pesanan ini sekarang telah lunas dan siap untuk diselesaikan."
+
+                return Response({"detail": detail_msg, "ready_to_complete": ready_to_complete}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class RiwayatPembayaranViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RiwayatPembayaran.objects.all()
