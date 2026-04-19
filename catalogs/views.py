@@ -1,3 +1,4 @@
+
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -128,7 +129,8 @@ class TernakPublicListView(generics.ListAPIView):
     filterset_class = TernakFilter
 
     def get_queryset(self):
-        return Ternak.objects.filter(deleted_at__isnull=True).order_by('-created_at')
+        return Ternak.objects.filter(deleted_at__isnull=True, status_ternak='Tersedia').order_by('-created_at')
+
 
 class DagingPublicListView(generics.ListAPIView):
     permission_classes = [AllowAny]
@@ -137,7 +139,8 @@ class DagingPublicListView(generics.ListAPIView):
     filterset_class = DagingFilter
 
     def get_queryset(self):
-        return Daging.objects.filter(deleted_at__isnull=True)
+        return Daging.objects.filter(deleted_at__isnull=True, status_daging='Tersedia').order_by('-created_at')
+
 
         
 # ══════════════════════════════════════════════════════════════════
@@ -218,5 +221,6 @@ class InvestPublicListView(generics.ListAPIView):
     filterset_class = InvestFilter
 
     def get_queryset(self):
-        return Invest.objects.filter(deleted_at__isnull=True)
+        return Invest.objects.filter(deleted_at__isnull=True, status_investernak='Open').order_by('-created_at')
+
 

@@ -3,7 +3,7 @@ from .models import Ternak, Daging, Invest
 
 class TernakFilter(django_filters.FilterSet):
     nama = django_filters.CharFilter(lookup_expr='icontains')
-    jenis = django_filters.CharFilter(lookup_expr='icontains')
+    jenis = django_filters.CharFilter(field_name='jenis', lookup_expr='icontains')
     status_ternak = django_filters.CharFilter(lookup_expr='exact')
     
     min_harga = django_filters.NumberFilter(field_name="harga", lookup_expr='gte')
