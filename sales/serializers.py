@@ -54,9 +54,13 @@ class PesananSerializer(serializers.ModelSerializer):
                 'id': r.id,
                 'nominal_pembayaran': r.nominal_pembayaran,
                 'bank_pengirim': r.bank_pengirim,
+                'nomor_rekening_pengirim': r.nomor_rekening_pengirim,
+                'nama_pengirim': r.nama_pengirim,
                 'status': r.status,
                 'catatan_verifikasi': r.catatan_verifikasi,
                 'created_at': r.created_at,
+                'created_by_name': r.created_by.nama if r.created_by else 'Sistem',
+                'verified_by_name': r.verified_by.nama if r.verified_by else None,
             } for r in riwayat
         ]
     
@@ -139,9 +143,13 @@ class PesananDagingSerializer(serializers.ModelSerializer):
                 'id': r.id,
                 'nominal_pembayaran': r.nominal_pembayaran,
                 'bank_pengirim': r.bank_pengirim,
+                'nomor_rekening_pengirim': r.nomor_rekening_pengirim,
+                'nama_pengirim': r.nama_pengirim,
                 'status': r.status,
                 'catatan_verifikasi': r.catatan_verifikasi,
                 'created_at': r.created_at,
+                'created_by_name': r.created_by.nama if r.created_by else 'Sistem',
+                'verified_by_name': r.verified_by.nama if r.verified_by else None,
             } for r in riwayat
         ]
     
@@ -224,9 +232,13 @@ class PesananInvestSerializer(serializers.ModelSerializer):
                 'id': r.id,
                 'nominal_pembayaran': r.nominal_pembayaran,
                 'bank_pengirim': r.bank_pengirim,
+                'nomor_rekening_pengirim': r.nomor_rekening_pengirim,
+                'nama_pengirim': r.nama_pengirim,
                 'status': r.status,
                 'catatan_verifikasi': r.catatan_verifikasi,
                 'created_at': r.created_at,
+                'created_by_name': r.created_by.nama if r.created_by else 'Sistem',
+                'verified_by_name': r.verified_by.nama if r.verified_by else None,
             } for r in riwayat
         ]
 
@@ -264,14 +276,16 @@ class RiwayatPembayaranSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     order_id = serializers.IntegerField(source='object_id', read_only=True)
     order_type = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(source='created_by.nama', read_only=True)
+    verified_by_name = serializers.CharField(source='verified_by.nama', read_only=True)
     
     class Meta:
         model = RiwayatPembayaran
         fields = [
             'id', 'order_id', 'order_type', 'customer_name', 'nominal_pembayaran', 
-            'bank_pengirim', 'nomor_rekening_pengirim', 'tanggal_transfer', 
-            'waktu_transfer', 'catatan', 'status', 'created_at', 'created_by',
-            'verified_at', 'verified_by', 'catatan_verifikasi'
+            'bank_pengirim', 'nomor_rekening_pengirim', 'nama_pengirim', 'tanggal_transfer', 
+            'waktu_transfer', 'catatan', 'status', 'created_at', 'created_by', 'created_by_name',
+            'verified_at', 'verified_by', 'verified_by_name', 'catatan_verifikasi'
         ]
         read_only_fields = ['created_by', 'verified_at', 'verified_by', 'status']
 
