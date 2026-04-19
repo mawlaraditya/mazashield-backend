@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'catalogs',
+    'sales',
     'django_filters',
     'cloudinary',
 ]
