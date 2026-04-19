@@ -194,6 +194,12 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                     for item in items:
                         item.ternak.status_ternak = 'Tersedia'
                         item.ternak.save()
+                    
+                    # Reset payment expectations
+                    pembayaran = instance.pembayaran
+                    pembayaran.tagihan = 0
+                    pembayaran.menunggu_persetujuan = 0
+                    pembayaran.save()
 
                 instance.save()
                 return Response(PesananSerializer(instance).data, status=status.HTTP_200_OK)
@@ -362,6 +368,12 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                         item.daging.status_daging = 'Tersedia'
                         item.daging.save()
 
+                    # Reset payment expectations
+                    pembayaran = instance.pembayaran
+                    pembayaran.tagihan = 0
+                    pembayaran.menunggu_persetujuan = 0
+                    pembayaran.save()
+
                 instance.save()
                 return Response(PesananDagingSerializer(instance).data, status=status.HTTP_200_OK)
         except Exception as e:
@@ -526,6 +538,12 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                         item.invest.status_investernak = 'Open'
                         item.invest.save()
 
+                    # Reset payment expectations
+                    pembayaran = instance.pembayaran
+                    pembayaran.tagihan = 0
+                    pembayaran.menunggu_persetujuan = 0
+                    pembayaran.save()
+
                 instance.save()
                 return Response(PesananInvestSerializer(instance).data, status=status.HTTP_200_OK)
 
@@ -607,13 +625,17 @@ class PaymentUpdateView(APIView):
 
         try:
             with transaction.atomic():
+                # Sanitization: Ensure account number is only digits
+                nomor_rek = "".join(filter(str.isdigit, str(request.data['nomor_rekening_pengirim'])))
+
                 # 5. Create RiwayatPembayaran
                 riwayat = RiwayatPembayaran.objects.create(
                     content_type=content_type,
                     object_id=order.id,
                     nominal_pembayaran=nominal,
                     bank_pengirim=request.data['bank_pengirim'],
-                    nomor_rekening_pengirim=request.data['nomor_rekening_pengirim'],
+                    nomor_rekening_pengirim=nomor_rek,
+                    nama_pengirim=request.data.get('nama_pengirim', ''),
                     tanggal_transfer=request.data['tanggal_transfer'],
                     waktu_transfer=request.data['waktu_transfer'],
                     catatan=request.data.get('catatan', ''),

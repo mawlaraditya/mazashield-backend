@@ -147,6 +147,7 @@ class RiwayatPembayaran(models.Model):
     nominal_pembayaran = models.DecimalField(max_digits=15, decimal_places=2)
     bank_pengirim = models.CharField(max_length=100)
     nomor_rekening_pengirim = models.CharField(max_length=50)
+    nama_pengirim = models.CharField(max_length=255, null=True, blank=True)
     tanggal_transfer = models.DateField()
     waktu_transfer = models.TimeField()
     catatan = models.TextField(null=True, blank=True)

@@ -130,6 +130,31 @@ class Invest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    
+    def save(self, *args, **kwargs):
+        from decimal import Decimal
+        
+        # 1. Total Modal = Harga Sapi + Pemeliharaan + Vaksin + Fee Marketing
+        self.total_modal = Decimal(str(self.harga_sapi)) + Decimal(str(self.biaya_pemeliharaan)) + \
+                          Decimal(str(self.vaksin_vitamin)) + Decimal(str(self.fee_marketing))
+        
+        # 2. Keuntungan = Harga Jual - Total Modal
+        # If harga_jual is 0 (not set yet), keuntungan will be negative (calculated potential)
+        self.keuntungan = Decimal(str(self.harga_jual)) - self.total_modal
+        
+        # 3. Hasil Investor = 50% * Keuntungan (Only if profitable)
+        if self.keuntungan > 0:
+            self.hasil_investor = self.keuntungan * Decimal('0.5')
+        else:
+            self.hasil_investor = Decimal('0')
+            
+        # 4. ROI = (Hasil Investor / Total Modal) * 100%
+        if self.total_modal > 0:
+            self.roi_persen = (self.hasil_investor / self.total_modal) * 100
+        else:
+            self.roi_persen = Decimal('0')
+            
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'invest'
