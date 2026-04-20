@@ -45,10 +45,8 @@ class PesananSerializer(serializers.ModelSerializer):
         ]
     
     def get_log_pembayaran(self, obj):
-        from django.contrib.contenttypes.models import ContentType
-        ctype = ContentType.objects.get_for_model(obj)
-        riwayat = RiwayatPembayaran.objects.filter(content_type=ctype, object_id=obj.id).order_by('-created_at')
-        # We need a basic dictionary list without triggering circular imports
+        # Optimized: Use prefetched payment_logs
+        riwayat = obj.payment_logs.all()
         return [
             {
                 'id': r.id,
@@ -72,7 +70,8 @@ class PesananSerializer(serializers.ModelSerializer):
         }
     
     def get_total_item(self, obj):
-        return obj.items.count()
+        # Optimized: Use prefetched items to avoid extra database query
+        return len(obj.items.all())
 
 class OrderCreateSerializer(serializers.Serializer):
     """
@@ -161,7 +160,8 @@ class PesananDagingSerializer(serializers.ModelSerializer):
         }
     
     def get_total_item(self, obj):
-        return obj.items.count()
+        # Optimized: Use prefetched items to avoid extra database query
+        return len(obj.items.all())
 
 class OrderDagingCreateSerializer(serializers.Serializer):
     """
@@ -250,7 +250,8 @@ class PesananInvestSerializer(serializers.ModelSerializer):
         }
 
     def get_total_item(self, obj):
-        return obj.items.count()
+        # Optimized: Use prefetched items to avoid extra database query
+        return len(obj.items.all())
 
 
 class OrderInvestCreateSerializer(serializers.Serializer):
