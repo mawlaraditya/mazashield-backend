@@ -158,9 +158,9 @@ class RiwayatPembayaran(models.Model):
     waktu_transfer = models.TimeField()
     catatan = models.TextField(null=True, blank=True)
 
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Menunggu Verifikasi')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Menunggu Verifikasi', db_index=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='pembayaran_created')
 
     verified_at = models.DateTimeField(null=True, blank=True)

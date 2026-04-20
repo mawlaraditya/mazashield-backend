@@ -218,6 +218,7 @@ class InvestPublicListView(generics.ListAPIView):
     Hanya menampilkan invest yang tidak di-soft delete
     """
     permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend]
     serializer_class = InvestSerializer
     filterset_class = InvestFilter
 
