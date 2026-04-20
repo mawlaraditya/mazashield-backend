@@ -207,13 +207,15 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                     pembayaran.menunggu_persetujuan = 0
                     pembayaran.save()
                     
+                    # Optimized: Bulk update Ternak status
                     for item in items:
                         item.ternak.status_ternak = 'Terjual'
-                        item.ternak.save()
+                    Ternak.objects.bulk_update([item.ternak for item in items], ['status_ternak'])
                 elif new_status == 'Dibatalkan':
+                    # Optimized: Bulk update Ternak status
                     for item in items:
                         item.ternak.status_ternak = 'Tersedia'
-                        item.ternak.save()
+                    Ternak.objects.bulk_update([item.ternak for item in items], ['status_ternak'])
                     
                     # Reset payment expectations
                     pembayaran = instance.pembayaran
@@ -398,14 +400,14 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                     pembayaran.menunggu_persetujuan = 0
                     pembayaran.save()
                     
-                    # Stock logic for Daging (if any specific status needed)
+                    # Stock logic for Daging (Optimized bulk update)
                     for item in items:
                         item.daging.status_daging = 'Terjual'
-                        item.daging.save()
+                    Daging.objects.bulk_update([item.daging for item in items], ['status_daging'])
                 elif new_status == 'Dibatalkan':
                     for item in items:
                         item.daging.status_daging = 'Tersedia'
-                        item.daging.save()
+                    Daging.objects.bulk_update([item.daging for item in items], ['status_daging'])
 
                     # Reset payment expectations
                     pembayaran = instance.pembayaran
@@ -579,13 +581,14 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                     pembayaran.menunggu_persetujuan = 0
                     pembayaran.save()
                     
+                    # Optimized: Bulk update Invest status
                     for item in items:
                         item.invest.status_investernak = 'Closed'
-                        item.invest.save()
+                    Invest.objects.bulk_update([item.invest for item in items], ['status_investernak'])
                 elif new_status == 'Dibatalkan':
                     for item in items:
                         item.invest.status_investernak = 'Open'
-                        item.invest.save()
+                    Invest.objects.bulk_update([item.invest for item in items], ['status_investernak'])
 
                     # Reset payment expectations
                     pembayaran = instance.pembayaran
@@ -769,7 +772,8 @@ class RiwayatPembayaranViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RiwayatPembayaran.objects.all().select_related(
         'created_by', 'verified_by'
     ).prefetch_related(
-        'content_object'
+        'content_object',
+        'content_object__customer'  # Optimized: Prefetch customer on content_object
     ).order_by('-created_at')
     serializer_class = RiwayatPembayaranSerializer
     permission_classes = [IsFinance]

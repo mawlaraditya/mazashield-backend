@@ -134,9 +134,8 @@ class PesananDagingSerializer(serializers.ModelSerializer):
         ]
     
     def get_log_pembayaran(self, obj):
-        from django.contrib.contenttypes.models import ContentType
-        ctype = ContentType.objects.get_for_model(obj)
-        riwayat = RiwayatPembayaran.objects.filter(content_type=ctype, object_id=obj.id).order_by('-created_at')
+        # Optimized: Use prefetched payment_logs GenericRelation
+        riwayat = obj.payment_logs.all()
         return [
             {
                 'id': r.id,
@@ -224,9 +223,8 @@ class PesananInvestSerializer(serializers.ModelSerializer):
         ]
 
     def get_log_pembayaran(self, obj):
-        from django.contrib.contenttypes.models import ContentType
-        ctype = ContentType.objects.get_for_model(obj)
-        riwayat = RiwayatPembayaran.objects.filter(content_type=ctype, object_id=obj.id).order_by('-created_at')
+        # Optimized: Use prefetched payment_logs GenericRelation
+        riwayat = obj.payment_logs.all()
         return [
             {
                 'id': r.id,
