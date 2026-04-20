@@ -64,8 +64,15 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         PBI-25: Read Internal Mazdafarm (Filter by status & created_at range)
+        Optimized with select_related and prefetch_related
         """
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related(
+            'customer', 'pembayaran'
+        ).prefetch_related(
+            'items__ternak',
+            'payment_logs__created_by',
+            'payment_logs__verified_by'
+        )
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         
@@ -100,18 +107,26 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # Validate cattle
+                # PBI-23: Bulk validate cattle availability
+                ternaks_qs = Ternak.objects.select_for_update().filter(
+                    id_ternak__in=daftar_id_ternak, 
+                    deleted_at__isnull=True
+                )
+                
+                # Create a map for quick lookup and maintain order if needed
+                ternak_map = {t.id_ternak: t for t in ternaks_qs}
                 ternaks = []
                 total_tagihan = 0
+                
                 for tid in daftar_id_ternak:
-                    try:
-                        ternak = Ternak.objects.select_for_update().get(id_ternak=tid)
-                        if ternak.status_ternak != 'Tersedia' or ternak.deleted_at is not None:
-                            return Response({"detail": f"Ternak {tid} tidak tersedia."}, status=status.HTTP_400_BAD_REQUEST)
-                        ternaks.append(ternak)
-                        total_tagihan += ternak.harga
-                    except Ternak.DoesNotExist:
+                    ternak = ternak_map.get(tid)
+                    if not ternak:
                         return Response({"detail": f"Ternak {tid} tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+                    if ternak.status_ternak != 'Tersedia':
+                        return Response({"detail": f"Ternak {tid} tidak tersedia."}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    ternaks.append(ternak)
+                    total_tagihan += ternak.harga
 
                 # Create Pesanan
                 pesanan = Pesanan.objects.create(
@@ -122,16 +137,21 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 )
 
 
-                # Create OrderItems and change cattle status
-                for ternak in ternaks:
-                    OrderItem.objects.create(
+                # Optimized: Bulk create OrderItems
+                order_items = [
+                    OrderItem(
                         pesanan=pesanan,
                         ternak=ternak,
                         berat_pesanan_kg=1.00,
                         harga=ternak.harga
-                    )
+                    ) for ternak in ternaks
+                ]
+                OrderItem.objects.bulk_create(order_items)
+
+                # Optimized: Bulk update Ternak status
+                for ternak in ternaks:
                     ternak.status_ternak = 'Dipesan'
-                    ternak.save()
+                Ternak.objects.bulk_update(ternaks, ['status_ternak'])
 
                 # Create Pembayaran
                 Pembayaran.objects.create(
@@ -232,8 +252,15 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         PBI-29: Read Internal Mazdaging (Filter by status & created_at range)
+        Optimized with select_related and prefetch_related
         """
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related(
+            'customer', 'pembayaran'
+        ).prefetch_related(
+            'items__daging',
+            'payment_logs__created_by',
+            'payment_logs__verified_by'
+        )
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         
@@ -267,28 +294,35 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # Validate meat items
+                # PBI-27: Bulk validate meat availability
+                id_dagings = [item['id_daging'] for item in items_data]
+                dagings_qs = Daging.objects.select_for_update().filter(
+                    id_daging__in=id_dagings,
+                    deleted_at__isnull=True
+                )
+                daging_map = {d.id_daging: d for d in dagings_qs}
+                
                 items_to_create = []
                 total_tagihan = 0
                 for item_data in items_data:
                     id_daging = item_data['id_daging']
                     berat_pesanan_kg = float(item_data['berat_pesanan_kg'])
+                    daging = daging_map.get(id_daging)
                     
-                    try:
-                        daging = Daging.objects.select_for_update().get(id_daging=id_daging)
-                        if daging.status_daging not in ['Tersedia', 'Pre Order'] or daging.deleted_at is not None:
-                            return Response({"detail": f"Daging {id_daging} tidak tersedia atau Pre Order."}, status=status.HTTP_400_BAD_REQUEST)
-                        
-                        subtotal = float(daging.harga_per_kg) * berat_pesanan_kg
-                        items_to_create.append({
-                            'daging': daging,
-                            'berat': berat_pesanan_kg,
-                            'harga_per_kg': daging.harga_per_kg,
-                            'subtotal': subtotal
-                        })
-                        total_tagihan += subtotal
-                    except Daging.DoesNotExist:
+                    if not daging:
                         return Response({"detail": f"Daging {id_daging} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    if daging.status_daging not in ['Tersedia', 'Pre Order']:
+                        return Response({"detail": f"Daging {id_daging} tidak tersedia."}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    subtotal = float(daging.harga_per_kg) * berat_pesanan_kg
+                    items_to_create.append({
+                        'daging': daging,
+                        'berat': berat_pesanan_kg,
+                        'harga_per_kg': daging.harga_per_kg,
+                        'subtotal': subtotal
+                    })
+                    total_tagihan += subtotal
 
                 # Create PesananDaging
                 pesanan = PesananDaging.objects.create(
@@ -299,15 +333,20 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 )
 
 
-                # Create OrderItems
-                for item in items_to_create:
-                    OrderItemDaging.objects.create(
+                # Optimized: Bulk create OrderItems
+                order_items = [
+                    OrderItemDaging(
                         pesanan=pesanan,
                         daging=item['daging'],
                         berat_pesanan_kg=item['berat'],
                         harga_per_kg=item['harga_per_kg'],
                         subtotal_item=item['subtotal']
-                    )
+                    ) for item in items_to_create
+                ]
+                OrderItemDaging.objects.bulk_create(order_items)
+
+                # Update status if needed (Daging doesn't always lock but let's be consistent)
+                # No bulk update needed for Daging here as it's not strictly 'Dipesan' in PBI logic
 
                 # Create PembayaranDaging
                 PembayaranDaging.objects.create(
@@ -409,7 +448,9 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset().select_related(
             'customer', 'pembayaran'
         ).prefetch_related(
-            'items__invest'
+            'items__invest',
+            'payment_logs__created_by',
+            'payment_logs__verified_by'
         )
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
@@ -441,15 +482,17 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
+                invests_qs = Invest.objects.select_for_update().filter(
+                    id_invest__in=daftar_id_invest,
+                    deleted_at__isnull=True
+                )
+                invest_map = {i.id_invest: i for i in invests_qs}
+
                 invests = []
                 total_tagihan = 0
                 for iid in daftar_id_invest:
-                    try:
-                        invest = Invest.objects.select_for_update().get(id_invest=iid)
-                    except Invest.DoesNotExist:
-                        return Response({"detail": f"Invest {iid} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
-
-                    if invest.deleted_at is not None:
+                    invest = invest_map.get(iid)
+                    if not invest:
                         return Response({"detail": f"Invest {iid} tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
 
                     if invest.status_investernak != 'Open':
@@ -469,14 +512,20 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                 )
 
 
-                for invest in invests:
-                    OrderItemInvest.objects.create(
+                # Optimized: Bulk create OrderItems
+                order_items = [
+                    OrderItemInvest(
                         pesanan=pesanan,
                         invest=invest,
                         harga_sapi=invest.harga_sapi,
-                    )
+                    ) for invest in invests
+                ]
+                OrderItemInvest.objects.bulk_create(order_items)
+
+                # Optimized: Bulk update Invest status
+                for invest in invests:
                     invest.status_investernak = 'Ongoing'
-                    invest.save()
+                Invest.objects.bulk_update(invests, ['status_investernak'])
 
                 PembayaranInvest.objects.create(
                     pesanan=pesanan,
@@ -713,7 +762,15 @@ class PaymentVerifyView(APIView):
 
 
 class RiwayatPembayaranViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = RiwayatPembayaran.objects.all()
+    """
+    PBI-36: Finance monitoring payment log
+    Optimized with select_related to avoid N+1 on users and prefetch_related for content_object
+    """
+    queryset = RiwayatPembayaran.objects.all().select_related(
+        'created_by', 'verified_by'
+    ).prefetch_related(
+        'content_object'
+    ).order_by('-created_at')
     serializer_class = RiwayatPembayaranSerializer
     permission_classes = [IsFinance]
 

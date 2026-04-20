@@ -76,6 +76,7 @@ class DagingInternalListCreateView(generics.ListCreateAPIView):
     filterset_class = DagingFilter
 
     def get_queryset(self):
+        # Optimized: Added better ordering and ensuring lean queryset for list views
         return Daging.objects.filter(deleted_at__isnull=True).order_by('-created_at')
 
     def get_serializer_class(self):

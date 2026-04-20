@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from catalogs.models import Ternak, Invest
 
@@ -20,6 +20,8 @@ class Pesanan(models.Model):
     updated_at = models.DateTimeField(null=True, blank=True)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pesanan_updated_by')
     deleted_at = models.DateTimeField(null=True, blank=True) 
+    
+    payment_logs = GenericRelation('RiwayatPembayaran', related_query_name='pesanan_logs')
 
     class Meta:
         db_table = 'pesanan'
@@ -62,6 +64,8 @@ class PesananDaging(models.Model):
     updated_at = models.DateTimeField(null=True, blank=True)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pesanan_daging_updated_by')
     deleted_at = models.DateTimeField(null=True, blank=True)
+    
+    payment_logs = GenericRelation('RiwayatPembayaran', related_query_name='pesanan_daging_logs')
 
     class Meta:
         db_table = 'pesanan_daging'
@@ -106,6 +110,8 @@ class PesananInvest(models.Model):
     updated_at = models.DateTimeField(null=True, blank=True)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pesanan_invest_updated_by')
     deleted_at = models.DateTimeField(null=True, blank=True)
+    
+    payment_logs = GenericRelation('RiwayatPembayaran', related_query_name='pesanan_invest_logs')
 
     class Meta:
         db_table = 'pesanan_invest'
