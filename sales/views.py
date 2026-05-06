@@ -20,11 +20,12 @@ from accounts.models import User
 from catalogs.models import Ternak, Daging, Invest
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
-from django.db.models import Q
+from django.db.models import Q, Sum, Count
 from rest_framework.views import APIView
 from django.contrib.contenttypes.models import ContentType
 import decimal
 from rest_framework.pagination import PageNumberPagination
+from django.db.models.functions import TruncMonth
 
 class OrderPagination(PageNumberPagination):
     page_size = 10
@@ -783,3 +784,111 @@ class RiwayatPembayaranViewSet(viewsets.ReadOnlyModelViewSet):
         if status_filter:
             return self.queryset.filter(status=status_filter)
         return self.queryset
+
+
+# ── PBI-40: FINANCIAL DASHBOARD ───────────────────────────────────────────────
+
+class IsSuperAdminOrFinance(permissions.BasePermission):
+    """PBI-40: Only SuperAdmin and Finance (Direktur Keuangan) may access the financial dashboard."""
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated
+            and request.user.role in ['SuperAdmin', 'Finance']
+        )
+
+
+class FinancialDashboardView(APIView):
+    """
+    PBI-40: Dashboard Finansial
+    GET /api/finance/dashboard/?tahun=<yyyy>
+    Returns:
+      - total_pendapatan_keseluruhan  : sum of sudah_dibayar from all completed orders
+      - data_penjualan_per_bulan      : list of {bulan, total_penjualan} for the given year
+      - data_customer_baru_per_bulan  : list of {bulan, jumlah_customer} for the given year
+    """
+    permission_classes = [IsSuperAdminOrFinance]
+
+    def get(self, request):
+        tahun = request.query_params.get('tahun')
+        try:
+            tahun = int(tahun) if tahun else timezone.now().year
+        except (ValueError, TypeError):
+            return Response({"detail": "Parameter tahun tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        MONTH_NAMES = ['','Januari','Februari','Maret','April','Mei','Juni',
+                       'Juli','Agustus','September','Oktober','November','Desember']
+
+        Z = decimal.Decimal('0')
+
+        # ── helpers ─────────────────────────────────────────────────────────
+        def _sum_done(model, rel):
+            return float(model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True)
+                         .aggregate(t=Sum(f'{rel}__sudah_dibayar'))['t'] or Z)
+
+        def _sum_done_year(model, rel):
+            return float(model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True, created_at__year=tahun)
+                         .aggregate(t=Sum(f'{rel}__sudah_dibayar'))['t'] or Z)
+
+        def _monthly(model, rel):
+            return (model.objects
+                    .filter(status_pesanan='Selesai', deleted_at__isnull=True, created_at__year=tahun)
+                    .annotate(bulan=TruncMonth('created_at')).values('bulan')
+                    .annotate(total=Sum(f'{rel}__sudah_dibayar')).order_by('bulan'))
+
+        def _piutang(model, rel):
+            agg = (model.objects.filter(status_pesanan='Diproses', deleted_at__isnull=True)
+                   .aggregate(tagihan=Sum(f'{rel}__tagihan'), menunggu=Sum(f'{rel}__menunggu_persetujuan')))
+            return {"tagihan": float(agg['tagihan'] or Z), "menunggu_verifikasi": float(agg['menunggu'] or Z)}
+
+        # ── 1. Total pendapatan keseluruhan (all-time) ────────────────────────
+        mf_all = _sum_done(Pesanan,       'pembayaran')
+        mg_all = _sum_done(PesananDaging, 'pembayaran')
+        iv_all = _sum_done(PesananInvest, 'pembayaran')
+        total_pendapatan_keseluruhan = mf_all + mg_all + iv_all
+
+        # ── 2. Penjualan per bulan (year filter) ─────────────────────────────
+        monthly_map = {}
+        for qs in [_monthly(Pesanan,'pembayaran'), _monthly(PesananDaging,'pembayaran'), _monthly(PesananInvest,'pembayaran')]:
+            for row in qs:
+                m = row['bulan'].month
+                monthly_map[m] = monthly_map.get(m, Z) + (row['total'] or Z)
+
+        data_penjualan_per_bulan = [
+            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "total_penjualan": float(monthly_map[m])}
+            for m in sorted(monthly_map.keys())
+        ]
+
+        # ── 3. Customer baru per bulan (year filter) ──────────────────────────
+        customer_qs = (User.objects.filter(role='Customer', deleted_at__isnull=True, created_at__year=tahun)
+                       .annotate(bulan=TruncMonth('created_at')).values('bulan')
+                       .annotate(jumlah=Count('id')).order_by('bulan'))
+        data_customer_baru_per_bulan = [
+            {"bulan": MONTH_NAMES[r['bulan'].month], "bulan_ke": r['bulan'].month, "jumlah_customer": r['jumlah']}
+            for r in customer_qs
+        ]
+
+        # ── 4. Breakdown pendapatan per layanan (year filter, Selesai) ────────
+        breakdown_pendapatan = {
+            "mazdafarm":     _sum_done_year(Pesanan,       'pembayaran'),
+            "mazdaging":     _sum_done_year(PesananDaging, 'pembayaran'),
+            "invest_ternak": _sum_done_year(PesananInvest, 'pembayaran'),
+        }
+
+        # ── 5. Piutang – outstanding receivables (status = Diproses) ─────────
+        pf = _piutang(Pesanan,       'pembayaran')
+        pg = _piutang(PesananDaging, 'pembayaran')
+        pi = _piutang(PesananInvest, 'pembayaran')
+        piutang = {
+            "total_tagihan":             pf["tagihan"] + pg["tagihan"] + pi["tagihan"],
+            "total_menunggu_verifikasi": pf["menunggu_verifikasi"] + pg["menunggu_verifikasi"] + pi["menunggu_verifikasi"],
+            "detail": {"mazdafarm": pf, "mazdaging": pg, "invest_ternak": pi},
+        }
+
+        return Response({
+            "tahun": tahun,
+            "total_pendapatan_keseluruhan": total_pendapatan_keseluruhan,
+            "breakdown_pendapatan": breakdown_pendapatan,
+            "piutang": piutang,
+            "data_penjualan_per_bulan": data_penjualan_per_bulan,
+            "data_customer_baru_per_bulan": data_customer_baru_per_bulan,
+        }, status=status.HTTP_200_OK)
