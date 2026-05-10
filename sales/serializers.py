@@ -297,3 +297,103 @@ class RiwayatPembayaranSerializer(serializers.ModelSerializer):
         if obj.content_type:
             return obj.content_type.model
         return None
+
+
+# ── CUSTOMER-FACING SERIALIZERS (Read-Only, External) ──────────────────────
+
+class CustomerOrderItemMazdafarmSerializer(serializers.ModelSerializer):
+    """
+    PBI-External-1: Item ternak dalam pesanan untuk tampilan Customer.
+    Memuat nama, berat, umur, harga, dan foto.
+    """
+    nama = serializers.CharField(source='ternak.nama')
+    berat = serializers.DecimalField(source='ternak.berat', max_digits=10, decimal_places=2)
+    umur = serializers.IntegerField(source='ternak.umur')
+    foto = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrderItem
+        fields = ['nama', 'berat', 'umur', 'harga', 'foto']
+
+    def get_foto(self, obj):
+        request = self.context.get('request')
+        if obj.ternak.foto:
+            url = obj.ternak.foto.url
+            if request:
+                return request.build_absolute_uri(url)
+            return url
+        return None
+
+
+class CustomerPesananMazdafarmSerializer(serializers.ModelSerializer):
+    """
+    PBI-External-1: Serializer Read Order Mazdafarm untuk Customer.
+    Hanya menampilkan data milik customer yang login.
+    Tidak ada data internal (data_customer, log_pembayaran).
+    """
+    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    daftar_ternak = CustomerOrderItemMazdafarmSerializer(source='items', many=True, read_only=True)
+    total_item = serializers.SerializerMethodField()
+    tagihan = serializers.DecimalField(
+        source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True
+    )
+    menunggu_persetujuan = serializers.DecimalField(
+        source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True
+    )
+    sudah_dibayar = serializers.DecimalField(
+        source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True
+    )
+
+    class Meta:
+        model = Pesanan
+        fields = [
+            'id_pesanan', 'daftar_ternak', 'total_item',
+            'tagihan', 'menunggu_persetujuan', 'sudah_dibayar',
+            'status_pesanan', 'created_at',
+        ]
+
+    def get_total_item(self, obj):
+        return len(obj.items.all())
+
+
+class CustomerOrderItemMazdagingSerializer(serializers.ModelSerializer):
+    """
+    PBI-External-2: Item daging dalam order untuk tampilan Customer.
+    """
+    kode_produk = serializers.CharField(source='daging.id_daging')
+    nama = serializers.CharField(source='daging.nama')
+
+    class Meta:
+        model = OrderItemDaging
+        fields = ['kode_produk', 'nama', 'berat_pesanan_kg', 'harga_per_kg', 'subtotal_item']
+
+
+class CustomerPesananMazdagingSerializer(serializers.ModelSerializer):
+    """
+    PBI-External-2: Serializer Read Order Mazdaging untuk Customer.
+    Memuat kode_produk, berat_pesanan, total_harga, order_status, created_at.
+    """
+    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    daftar_item = CustomerOrderItemMazdagingSerializer(source='items', many=True, read_only=True)
+    total_item = serializers.SerializerMethodField()
+    total_harga = serializers.DecimalField(
+        source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True
+    )
+    sudah_dibayar = serializers.DecimalField(
+        source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True
+    )
+    menunggu_persetujuan = serializers.DecimalField(
+        source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True
+    )
+    order_status = serializers.CharField(source='status_pesanan')
+
+    class Meta:
+        model = PesananDaging
+        fields = [
+            'id_pesanan', 'daftar_item', 'total_item',
+            'total_harga', 'sudah_dibayar', 'menunggu_persetujuan',
+            'order_status', 'created_at',
+        ]
+
+    def get_total_item(self, obj):
+        return len(obj.items.all())
