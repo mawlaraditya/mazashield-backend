@@ -3,7 +3,7 @@ from .models import (
     Pesanan, OrderItem, Pembayaran, 
     PesananDaging, OrderItemDaging, PembayaranDaging, 
     PesananInvest, OrderItemInvest, PembayaranInvest,
-    RiwayatPembayaran
+    RiwayatPembayaran, HistoriBerat, LaporanInvestasi
 )
 from accounts.models import User
 from catalogs.models import Ternak, Daging, Invest
@@ -397,3 +397,119 @@ class CustomerPesananMazdagingSerializer(serializers.ModelSerializer):
 
     def get_total_item(self, obj):
         return len(obj.items.all())
+
+
+# ── PBI-34: External Invest Order Serializer (Customer read-only) ─────────────
+
+class OrderItemInvestExternalSerializer(serializers.ModelSerializer):
+    """PBI-34: Item detail invest untuk customer (read-only)."""
+    id_invest         = serializers.CharField(source='invest.id_invest')
+    nama              = serializers.CharField(source='invest.nama_paket')
+    berat             = serializers.DecimalField(source='invest.berat', max_digits=10, decimal_places=2, allow_null=True)
+    umur              = serializers.SerializerMethodField()
+    harga_beli        = serializers.DecimalField(source='harga_sapi', max_digits=15, decimal_places=2)
+    harga_jual_per_kg = serializers.DecimalField(source='invest.harga_jual', max_digits=15, decimal_places=2)
+    foto              = serializers.ImageField(source='invest.foto', allow_null=True)
+    status_investernak = serializers.CharField(source='invest.status_investernak')
+
+    class Meta:
+        model = OrderItemInvest
+        fields = ['id_invest', 'nama', 'berat', 'umur', 'harga_beli', 'harga_jual_per_kg', 'foto', 'status_investernak']
+
+    def get_umur(self, obj):
+        """Durasi investasi dalam hari dari katalog."""
+        return obj.invest.durasi_hari
+
+
+class PesananInvestExternalSerializer(serializers.ModelSerializer):
+    """PBI-34: Serializer pesanan invest untuk customer (read-only)."""
+    id_pesanan   = serializers.IntegerField(source='id', read_only=True)
+    daftar_invest = OrderItemInvestExternalSerializer(source='items', many=True, read_only=True)
+    tagihan               = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
+    sudah_dibayar         = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
+    menunggu_persetujuan  = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = PesananInvest
+        fields = [
+            'id_pesanan', 'status_pesanan', 'created_at',
+            'daftar_invest', 'tagihan', 'sudah_dibayar', 'menunggu_persetujuan',
+        ]
+
+class HistoriBeratSerializer(serializers.ModelSerializer):
+    """PBI-37/38: Histori berat mingguan."""
+    class Meta:
+        model = HistoriBerat
+        fields = ['id', 'tanggal_input', 'berat_kg', 'keterangan', 'estimasi_harga_jual', 'created_at']
+        read_only_fields = ['estimasi_harga_jual', 'created_at']
+
+
+class HistoriBeratInputSerializer(serializers.Serializer):
+    """PBI-37: Input berat mingguan (Marketing/SuperAdmin)."""
+    tanggal_input = serializers.DateField()
+    berat_kg      = serializers.DecimalField(max_digits=10, decimal_places=2)
+    keterangan    = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_berat_kg(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Berat harus lebih dari 0.")
+        return value
+
+
+class PerhitunganAkhirSerializer(serializers.Serializer):
+    """PBI-37: Perhitungan akhir investasi (hanya saat status = Selesai)."""
+    harga_jual_aktual  = serializers.DecimalField(max_digits=15, decimal_places=2)
+    biaya_pakan        = serializers.DecimalField(max_digits=15, decimal_places=2)
+    biaya_operasional  = serializers.DecimalField(max_digits=15, decimal_places=2)
+    biaya_obat_vitamin = serializers.DecimalField(max_digits=15, decimal_places=2)
+    fee_marketing      = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+    def validate(self, data):
+        for field in ['harga_jual_aktual', 'biaya_pakan', 'biaya_operasional', 'biaya_obat_vitamin', 'fee_marketing']:
+            if data.get(field, 0) < 0:
+                raise serializers.ValidationError(f"{field} tidak boleh negatif.")
+        return data
+
+class LaporanInvestasiSerializer(serializers.ModelSerializer):
+    """Laporan investasi"""
+    id_pesanan     = serializers.IntegerField(source='pesanan.id', read_only=True)
+    status_pesanan = serializers.CharField(source='pesanan.status_pesanan', read_only=True)
+    histori_berat  = HistoriBeratSerializer(many=True, read_only=True)
+    harga_beli     = serializers.SerializerMethodField()
+    info_invest    = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LaporanInvestasi
+        fields = [
+            'id', 'id_pesanan', 'status_pesanan',
+            'harga_jual_per_kg', 'harga_beli', 'info_invest',
+            'histori_berat',
+            # Final calculation fields
+            'harga_jual_aktual', 'biaya_pakan', 'biaya_operasional',
+            'biaya_obat_vitamin', 'fee_marketing',
+            'laba_kotor', 'total_biaya', 'laba_bersih', 'bagi_hasil_investor',
+            'created_at', 'updated_at',
+        ]
+
+    def get_harga_beli(self, obj):
+        try:
+            return float(obj.pesanan.pembayaran.sudah_dibayar)
+        except Exception:
+            return None
+
+    def get_info_invest(self, obj):
+        """Returns invest item info for the first invest item in the pesanan."""
+        items = obj.pesanan.items.select_related('invest').all()
+        result = []
+        for item in items:
+            inv = item.invest
+            result.append({
+                'nama': inv.nama_paket,
+                'berat_awal': float(inv.berat) if inv.berat else None,
+                'durasi_hari': inv.durasi_hari,
+                'foto': inv.foto.url if inv.foto else None,
+                'harga_beli': float(item.harga_sapi),
+            })
+        return result
+
+
