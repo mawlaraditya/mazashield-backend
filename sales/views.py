@@ -14,7 +14,8 @@ from .serializers import (
     PesananSerializer, OrderCreateSerializer, OrderUpdateSerializer,
     PesananDagingSerializer, OrderDagingCreateSerializer,
     PesananInvestSerializer, OrderInvestCreateSerializer, OrderInvestUpdateSerializer,
-    RiwayatPembayaranSerializer
+    RiwayatPembayaranSerializer,
+    CustomerPesananMazdafarmSerializer, CustomerPesananMazdagingSerializer,
 )
 from accounts.models import User
 from catalogs.models import Ternak, Daging, Invest
@@ -445,7 +446,6 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
 
-
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'customer', 'pembayaran'
@@ -601,7 +601,6 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
     def _get_pesanan_or_404(self, pk):
         try:
@@ -783,3 +782,104 @@ class RiwayatPembayaranViewSet(viewsets.ReadOnlyModelViewSet):
         if status_filter:
             return self.queryset.filter(status=status_filter)
         return self.queryset
+
+
+# ── CUSTOMER-FACING VIEWS (Read-Only, External) ────────────────────────────
+
+class IsCustomer(permissions.BasePermission):
+    """Customer yang sudah login dan aktif."""
+    def has_permission(self, request, view):
+        return (
+            request.user and
+            request.user.is_authenticated and
+            request.user.role == 'Customer' and
+            request.user.deleted_at is None
+        )
+
+
+class CustomerOrderMazdafarmView(APIView):
+    """
+    PBI-External-1: Read Order Mazdafarm untuk Customer.
+    GET /api/order/mazdafarm        → list semua pesanan milik customer yang login
+    GET /api/order/mazdafarm/<pk>   → detail satu pesanan milik customer yang login
+    Hanya bisa READ. Tidak ada create/update/delete.
+    """
+    permission_classes = [IsCustomer]
+
+    def _get_base_queryset(self, user):
+        return (
+            Pesanan.objects
+            .filter(customer=user, deleted_at__isnull=True)
+            .select_related('pembayaran')
+            .prefetch_related('items__ternak')
+            .order_by('-created_at')
+        )
+
+    def get(self, request, pk=None):
+        if pk is not None:
+            # Detail view
+            try:
+                pesanan = self._get_base_queryset(request.user).get(pk=pk)
+            except Pesanan.DoesNotExist:
+                return Response(
+                    {"detail": "Pesanan tidak ditemukan."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            serializer = CustomerPesananMazdafarmSerializer(
+                pesanan, context={'request': request}
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # List view dengan pagination
+        queryset = self._get_base_queryset(request.user)
+
+        paginator = OrderPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = CustomerPesananMazdafarmSerializer(
+            page, many=True, context={'request': request}
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+
+class CustomerOrderMazdagingView(APIView):
+    """
+    PBI-External-2: Read Order Mazdaging untuk Customer.
+    GET /api/order/mazdaging        → list semua order milik customer yang login
+    GET /api/order/mazdaging/<pk>   → detail satu order milik customer yang login
+    Hanya bisa READ. Tidak ada create/update/delete.
+    """
+    permission_classes = [IsCustomer]
+
+    def _get_base_queryset(self, user):
+        return (
+            PesananDaging.objects
+            .filter(customer=user, deleted_at__isnull=True)
+            .select_related('pembayaran')
+            .prefetch_related('items__daging')
+            .order_by('-created_at')
+        )
+
+    def get(self, request, pk=None):
+        if pk is not None:
+            # Detail view
+            try:
+                pesanan = self._get_base_queryset(request.user).get(pk=pk)
+            except PesananDaging.DoesNotExist:
+                return Response(
+                    {"detail": "Order tidak ditemukan."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            serializer = CustomerPesananMazdagingSerializer(
+                pesanan, context={'request': request}
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # List view dengan pagination
+        queryset = self._get_base_queryset(request.user)
+
+        paginator = OrderPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = CustomerPesananMazdagingSerializer(
+            page, many=True, context={'request': request}
+        )
+        return paginator.get_paginated_response(serializer.data)
