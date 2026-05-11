@@ -990,3 +990,69 @@ class CustomerOrderMazdagingView(APIView):
             page, many=True, context={'request': request}
         )
         return paginator.get_paginated_response(serializer.data)
+
+
+# ── PBI-38: Read Laporan Hasil Investasi (Customer) ───────────────────────────
+
+class LaporanInvestasiCustomerView(APIView):
+    """
+    PBI-38: GET /api/order/invest/<id_pesanan>/laporan/
+    Customer reads their own investment report (read-only).
+    Shows estimation during Diproses, full final calc when Selesai,
+    and cancellation note when Dibatalkan.
+    """
+    permission_classes = [IsCustomer]
+
+    def get(self, request, id_pesanan):
+        from .models import LaporanInvestasi
+        from .serializers import LaporanInvestasiSerializer
+
+        # 1. Fetch pesanan — must belong to the logged-in customer
+        try:
+            pesanan = PesananInvest.objects.select_related('pembayaran').get(
+                pk=id_pesanan, deleted_at__isnull=True, customer=request.user
+            )
+        except PesananInvest.DoesNotExist:
+            return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Dibatalkan: no report data
+        if pesanan.status_pesanan == 'Dibatalkan':
+            return Response({
+                "id_pesanan": pesanan.id,
+                "status_pesanan": "Dibatalkan",
+                "detail": "Investasi ini telah dibatalkan. Tidak ada laporan hasil yang tersedia.",
+            }, status=status.HTTP_200_OK)
+
+        # 3. Get or create laporan
+        laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+        return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
+
+
+# ── PBI-34: Read Order Invest External (Customer) ─────────────────────────────
+
+class IsCustomer(permissions.BasePermission):
+    """PBI-34/38: Only authenticated customers."""
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role == 'Customer'
+
+
+class OrderInvestExternalView(APIView):
+    """
+    PBI-34: GET /api/order/invest/
+    Returns all PesananInvest belonging to the logged-in customer.
+    Read-only — customer cannot create, edit, or delete via this endpoint.
+    """
+    permission_classes = [IsCustomer]
+
+    def get(self, request):
+        from .serializers import PesananInvestExternalSerializer
+        queryset = (
+            PesananInvest.objects
+            .filter(customer=request.user, deleted_at__isnull=True)
+            .select_related('pembayaran')
+            .prefetch_related('items__invest')
+            .order_by('-created_at')
+        )
+        serializer = PesananInvestExternalSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+

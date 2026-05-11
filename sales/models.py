@@ -147,7 +147,7 @@ class RiwayatPembayaran(models.Model):
     ]
 
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
+    object_id = models.PositiveIntegerField(db_index=True)
     content_object = GenericForeignKey('content_type', 'object_id')
 
     nominal_pembayaran = models.DecimalField(max_digits=15, decimal_places=2)
@@ -158,9 +158,9 @@ class RiwayatPembayaran(models.Model):
     waktu_transfer = models.TimeField()
     catatan = models.TextField(null=True, blank=True)
 
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Menunggu Verifikasi', db_index=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Menunggu Verifikasi')
 
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='pembayaran_created')
 
     verified_at = models.DateTimeField(null=True, blank=True)
@@ -173,3 +173,99 @@ class RiwayatPembayaran(models.Model):
 
     def __str__(self):
         return f"Pembayaran {self.id} - {self.nominal_pembayaran} ({self.status})"
+
+
+# ── PBI-37/38: LAPORAN HASIL INVESTASI ────────────────────────────────────────
+
+class LaporanInvestasi(models.Model):
+    """
+    PBI-37: Laporan hasil investasi per pesanan invest.
+    Satu pesanan invest memiliki satu laporan.
+    Berisi histori berat mingguan dan (opsional) perhitungan akhir jika Selesai.
+    """
+    pesanan = models.OneToOneField(
+        PesananInvest,
+        on_delete=models.CASCADE,
+        related_name='laporan',
+        db_index=True,
+    )
+
+    # Harga jual per kg yang digunakan untuk estimasi (diinput oleh Marketing)
+    harga_jual_per_kg = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    # ── Perhitungan akhir (diisi saat status_pesanan = Selesai) ──────────────
+    harga_jual_aktual    = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    biaya_pakan          = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    biaya_operasional    = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    biaya_obat_vitamin   = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    fee_marketing        = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+
+    # ── Computed fields (auto-calculated on save) ─────────────────────────────
+    laba_kotor           = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    total_biaya          = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    laba_bersih          = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    bagi_hasil_investor  = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'laporan_investasi'
+
+    def hitung_akhir(self):
+        """Auto-compute laba_kotor, total_biaya, laba_bersih, bagi_hasil_investor."""
+        from decimal import Decimal
+        if not self.harga_jual_aktual:
+            return
+        # harga_beli = sudah_dibayar on the pesanan's pembayaran
+        harga_beli = self.pesanan.pembayaran.sudah_dibayar
+        self.laba_kotor = Decimal(str(self.harga_jual_aktual)) - Decimal(str(harga_beli))
+        self.total_biaya = (
+            Decimal(str(self.biaya_pakan or 0))
+            + Decimal(str(self.biaya_operasional or 0))
+            + Decimal(str(self.biaya_obat_vitamin or 0))
+            + Decimal(str(self.fee_marketing or 0))
+        )
+        self.laba_bersih = self.laba_kotor - self.total_biaya
+        # Investor gets 50% of laba_bersih if positive
+        if self.laba_bersih > 0:
+            self.bagi_hasil_investor = self.laba_bersih * Decimal('0.5')
+        else:
+            self.bagi_hasil_investor = Decimal('0')
+
+    def __str__(self):
+        return f"Laporan Pesanan #{self.pesanan_id}"
+
+
+class HistoriBerat(models.Model):
+    """
+    PBI-37: Histori berat mingguan ternak investasi.
+    Setiap input berat tersimpan sebagai entri baru (tidak menimpa).
+    """
+    laporan = models.ForeignKey(
+        LaporanInvestasi,
+        on_delete=models.CASCADE,
+        related_name='histori_berat',
+    )
+    tanggal_input        = models.DateField()
+    berat_kg             = models.DecimalField(max_digits=10, decimal_places=2)
+    keterangan           = models.TextField(null=True, blank=True)
+    estimasi_harga_jual  = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'histori_berat'
+        ordering = ['tanggal_input']
+
+    def save(self, *args, **kwargs):
+        from decimal import Decimal
+        # Auto-compute estimasi: berat_kg × harga_jual_per_kg (from parent laporan)
+        self.estimasi_harga_jual = (
+            Decimal(str(self.berat_kg)) * Decimal(str(self.laporan.harga_jual_per_kg))
+        )
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Berat {self.berat_kg}kg on {self.tanggal_input}"
+
