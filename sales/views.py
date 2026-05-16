@@ -62,7 +62,6 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
 
-
     def get_queryset(self):
         """
         PBI-25: Read Internal Mazdafarm (Filter by status & created_at range)
@@ -84,8 +83,6 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(created_at__date__lte=end_date)
             
         return queryset
-
-
     def create(self, request, *args, **kwargs):
         """
         PBI-23: Create Order Mazdafarm
@@ -992,22 +989,116 @@ class CustomerOrderMazdagingView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+
+# ── PBI-37: Update Laporan Hasil Investasi (Marketing/SuperAdmin) ─────────────
+
+class LaporanInvestasiView(APIView):
+    """
+    PBI-37: Manage investment report for a given PesananInvest.
+    GET  /api/sales/laporan-invest/<id_pesanan>/ -> Return current laporan (auto-creates one if missing)
+    Access: SuperAdmin and Marketing only.
+    """
+    permission_classes = [IsSuperAdminOrMarketing]
+
+    def _get_pesanan(self, id_pesanan):
+        try:
+            return PesananInvest.objects.select_related('pembayaran').get(
+                pk=id_pesanan, deleted_at__isnull=True
+            )
+        except PesananInvest.DoesNotExist:
+            return None
+
+    def get(self, request, id_pesanan):
+        pesanan = self._get_pesanan(id_pesanan)
+        if not pesanan:
+            return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+        from .models import LaporanInvestasi
+        laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+        from .serializers import LaporanInvestasiSerializer
+        return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
+
+
+class LaporanInvestasiBeratView(APIView):
+    """
+    PBI-37: POST /api/sales/laporan-invest/<id_pesanan>/berat/
+    Add a new weekly weight entry (only when status_pesanan = Diproses).
+    """
+    permission_classes = [IsSuperAdminOrMarketing]
+
+    def post(self, request, id_pesanan):
+        from .models import LaporanInvestasi, HistoriBerat
+        from .serializers import HistoriBeratInputSerializer, LaporanInvestasiSerializer
+        try:
+            pesanan = PesananInvest.objects.select_related('pembayaran').get(pk=id_pesanan, deleted_at__isnull=True)
+        except PesananInvest.DoesNotExist:
+            return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        if pesanan.status_pesanan != 'Diproses':
+            return Response({"detail": "Input berat mingguan hanya tersedia selama status pesanan = Diproses."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = HistoriBeratInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+        if 'harga_jual_per_kg' in request.data:
+            try:
+                import decimal
+                laporan.harga_jual_per_kg = decimal.Decimal(str(request.data['harga_jual_per_kg']))
+                laporan.save()
+            except Exception: pass
+
+        HistoriBerat.objects.create(
+            laporan=laporan,
+            tanggal_input=serializer.validated_data['tanggal_input'],
+            berat_kg=serializer.validated_data['berat_kg'],
+            keterangan=serializer.validated_data.get('keterangan', ''),
+        )
+        return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
+
+
+class LaporanInvestasiAkhirView(APIView):
+    """
+    PBI-37: PUT /api/sales/laporan-invest/<id_pesanan>/akhir/
+    Save final calculation (only when status_pesanan = Selesai).
+    """
+    permission_classes = [IsSuperAdminOrMarketing]
+
+    def put(self, request, id_pesanan):
+        from .models import LaporanInvestasi
+        from .serializers import PerhitunganAkhirSerializer, LaporanInvestasiSerializer
+        try:
+            pesanan = PesananInvest.objects.select_related('pembayaran').get(pk=id_pesanan, deleted_at__isnull=True)
+        except PesananInvest.DoesNotExist:
+            return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
+
+        if pesanan.status_pesanan != 'Selesai':
+            return Response({"detail": "Perhitungan akhir hanya dapat disimpan ketika status pesanan = Selesai."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = PerhitunganAkhirSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+        for field in ['harga_jual_aktual', 'biaya_pakan', 'biaya_operasional', 'biaya_obat_vitamin', 'fee_marketing']:
+            setattr(laporan, field, serializer.validated_data[field])
+        laporan.hitung_akhir()
+        laporan.save()
+        return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
+
+
 # ── PBI-38: Read Laporan Hasil Investasi (Customer) ───────────────────────────
 
 class LaporanInvestasiCustomerView(APIView):
     """
     PBI-38: GET /api/order/invest/<id_pesanan>/laporan/
     Customer reads their own investment report (read-only).
-    Shows estimation during Diproses, full final calc when Selesai,
-    and cancellation note when Dibatalkan.
     """
     permission_classes = [IsCustomer]
 
     def get(self, request, id_pesanan):
         from .models import LaporanInvestasi
         from .serializers import LaporanInvestasiSerializer
-
-        # 1. Fetch pesanan — must belong to the logged-in customer
         try:
             pesanan = PesananInvest.objects.select_related('pembayaran').get(
                 pk=id_pesanan, deleted_at__isnull=True, customer=request.user
@@ -1015,7 +1106,6 @@ class LaporanInvestasiCustomerView(APIView):
         except PesananInvest.DoesNotExist:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 2. Dibatalkan: no report data
         if pesanan.status_pesanan == 'Dibatalkan':
             return Response({
                 "id_pesanan": pesanan.id,
@@ -1023,24 +1113,16 @@ class LaporanInvestasiCustomerView(APIView):
                 "detail": "Investasi ini telah dibatalkan. Tidak ada laporan hasil yang tersedia.",
             }, status=status.HTTP_200_OK)
 
-        # 3. Get or create laporan
         laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
         return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
 
 
 # ── PBI-34: Read Order Invest External (Customer) ─────────────────────────────
 
-class IsCustomer(permissions.BasePermission):
-    """PBI-34/38: Only authenticated customers."""
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'Customer'
-
-
 class OrderInvestExternalView(APIView):
     """
     PBI-34: GET /api/order/invest/
     Returns all PesananInvest belonging to the logged-in customer.
-    Read-only — customer cannot create, edit, or delete via this endpoint.
     """
     permission_classes = [IsCustomer]
 
@@ -1056,3 +1138,80 @@ class OrderInvestExternalView(APIView):
         serializer = PesananInvestExternalSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+# ── PBI-39: Laporan Penjualan (Marketing/SuperAdmin) ──────────────────────────
+
+
+class LaporanPenjualanView(APIView):
+    """
+    PBI-39: GET /api/sales/laporan-penjualan/
+    Returns all completed orders (status = Selesai) across all 3 order types.
+    Supports filters: start_date, end_date, jenis_layanan.
+    Returns rekapitulasi: total_transaksi, total_customer_unik, total_pendapatan.
+    Supports pagination via ?page=&limit= query params.
+    """
+    permission_classes = [IsSuperAdminOrMarketing]
+
+    def get(self, request):
+        start_date    = request.query_params.get('start_date')
+        end_date      = request.query_params.get('end_date')
+        jenis_layanan = request.query_params.get('jenis_layanan')  # Mazdafarm | Mazdaging | Investernak
+        page          = int(request.query_params.get('page', 1))
+        limit         = min(int(request.query_params.get('limit', 10)), 100)
+
+        orders = []
+
+        def _add_orders(model, payment_rel, jenis, label):
+            qs = model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True)
+            if start_date:
+                qs = qs.filter(created_at__date__gte=start_date)
+            if end_date:
+                qs = qs.filter(created_at__date__lte=end_date)
+            qs = qs.select_related('customer', payment_rel)
+            for o in qs:
+                payment = getattr(o, payment_rel)
+                orders.append({
+                    'id_pesanan':           o.id,
+                    'nama_customer':        o.customer.nama,
+                    'jenis_layanan':        jenis,
+                    # Konsisten dengan manajemen pesanan: tagihan = total bill
+                    'total_tagihan':        float(payment.tagihan),
+                    'sudah_dibayar':        float(payment.sudah_dibayar),
+                    'menunggu_persetujuan': float(payment.menunggu_persetujuan),
+                    'tanggal_transaksi':    o.created_at,
+                })
+
+        if not jenis_layanan or jenis_layanan == 'Mazdafarm':
+            _add_orders(Pesanan,       'pembayaran', 'Mazdafarm',   'Pesanan Ternak')
+        if not jenis_layanan or jenis_layanan == 'Mazdaging':
+            _add_orders(PesananDaging, 'pembayaran', 'Mazdaging',   'Pesanan Daging')
+        if not jenis_layanan or jenis_layanan == 'Investernak':
+            _add_orders(PesananInvest, 'pembayaran', 'Investernak', 'Pesanan Invest Ternak')
+
+        # Sort by date descending
+        orders.sort(key=lambda x: x['tanggal_transaksi'], reverse=True)
+
+        # Rekapitulasi
+        total_pendapatan    = sum(o['total_tagihan'] for o in orders)
+        customer_unik       = len(set(o['nama_customer'] for o in orders))
+        total_transaksi     = len(orders)
+
+        # Pagination
+        offset        = (page - 1) * limit
+        paginated     = orders[offset: offset + limit]
+        total_pages   = (total_transaksi + limit - 1) // limit if total_transaksi else 1
+
+        return Response({
+            "rekapitulasi": {
+                "total_jumlah_transaksi": total_transaksi,
+                "total_customer_unik":    customer_unik,
+                "total_pendapatan":       total_pendapatan,
+            },
+            "pagination": {
+                "page":        page,
+                "limit":       limit,
+                "total_pages": total_pages,
+                "total_items": total_transaksi,
+            },
+            "data": paginated,
+        }, status=status.HTTP_200_OK)

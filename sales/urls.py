@@ -26,5 +26,23 @@ urlpatterns = [
     # PUT  /api/sales/order/invest/{pk}/ → Update Status
 
     path('payment/<int:id_pesanan>/update', PaymentUpdateView.as_view(), name='payment-update'),
+
+      # ── PBI-37: Laporan Investasi (Marketing/SuperAdmin) ──────────────────────
+    # GET  /api/sales/laporan-invest/<id>/ → Read laporan (auto-create if missing)
+    # POST /api/sales/laporan-invest/<id>/berat/ → Add weekly weight entry
+    # PUT  /api/sales/laporan-invest/<id>/akhir/ → Save final calculation
+    path('laporan-invest/<int:id_pesanan>/', LaporanInvestasiView.as_view(), name='laporan-invest-read'),
+    path('laporan-invest/<int:id_pesanan>/berat/', LaporanInvestasiBeratView.as_view(), name='laporan-invest-berat'),
+    path('laporan-invest/<int:id_pesanan>/akhir/', LaporanInvestasiAkhirView.as_view(), name='laporan-invest-akhir'),
+
+    # ── PBI-39: Laporan Penjualan (Marketing/SuperAdmin) ─────────────────────
+    # GET /api/sales/laporan-penjualan/?start_date=&end_date=&jenis_layanan=&page=&limit=
+    path('laporan-penjualan/', LaporanPenjualanView.as_view(), name='laporan-penjualan'),
+
     path('', include(router.urls)),
+
+    # ── PBI-39: Laporan Penjualan (Marketing/SuperAdmin) ─────────────────────
+    # GET /api/sales/laporan-penjualan/?start_date=&end_date=&jenis_layanan=&page=&limit=
+    path('laporan-penjualan/', LaporanPenjualanView.as_view(), name='laporan-penjualan'),
+
 ]
