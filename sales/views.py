@@ -1184,8 +1184,8 @@ class LaporanPenjualanView(APIView):
                     'id_pesanan':           o.id,
                     'nama_customer':        o.customer.nama,
                     'jenis_layanan':        jenis,
-                    # Konsisten dengan manajemen pesanan: tagihan = total bill
-                    'total_tagihan':        float(payment.tagihan),
+                    # Untuk pesanan selesai, tagihan = 0, jadi total asli = sudah_dibayar + tagihan + menunggu_persetujuan
+                    'total_tagihan':        float(payment.sudah_dibayar) + float(payment.tagihan) + float(payment.menunggu_persetujuan),
                     'sudah_dibayar':        float(payment.sudah_dibayar),
                     'menunggu_persetujuan': float(payment.menunggu_persetujuan),
                     'tanggal_transaksi':    o.created_at,
