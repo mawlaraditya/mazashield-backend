@@ -836,58 +836,68 @@ class FinancialDashboardView(APIView):
                    .aggregate(tagihan=Sum(f'{rel}__tagihan'), menunggu=Sum(f'{rel}__menunggu_persetujuan')))
             return {"tagihan": float(agg['tagihan'] or Z), "menunggu_verifikasi": float(agg['menunggu'] or Z)}
 
-        # ── 1. Total pendapatan keseluruhan (all-time) ────────────────────────
-        mf_all = _sum_done(Pesanan,       'pembayaran')
-        mg_all = _sum_done(PesananDaging, 'pembayaran')
-        iv_all = _sum_done(PesananInvest, 'pembayaran')
-        total_pendapatan_keseluruhan = mf_all + mg_all + iv_all
+        # ── 1. Total Penjualan Tahun Aktif (PBI-39 equivalent) ───────────────────
+        mf_year = _sum_done_year(Pesanan,       'pembayaran')
+        mg_year = _sum_done_year(PesananDaging, 'pembayaran')
+        iv_year = _sum_done_year(PesananInvest, 'pembayaran')
+        total_penjualan_tahun_aktif = mf_year + mg_year + iv_year
 
-        # ── 2. Penjualan per bulan (year filter) ─────────────────────────────
+        # ── 2. Penjualan Per Bulan ─────────────────────────────────────────────
         monthly_map = {}
         for qs in [_monthly(Pesanan,'pembayaran'), _monthly(PesananDaging,'pembayaran'), _monthly(PesananInvest,'pembayaran')]:
             for row in qs:
                 m = row['bulan'].month
                 monthly_map[m] = monthly_map.get(m, Z) + (row['total'] or Z)
 
-        data_penjualan_per_bulan = [
-            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "total_penjualan": float(monthly_map.get(m, Z))}
+        penjualan_per_bulan = [
+            {"bulan": MONTH_NAMES[m], "total": float(monthly_map.get(m, Z))}
             for m in range(1, 13)
         ]
 
-        # ── 3. Customer baru per bulan (year filter) ──────────────────────────
+        # ── 3. Customer Baru Per Bulan ─────────────────────────────────────────
         customer_qs = (User.objects.filter(role='Customer', deleted_at__isnull=True, created_at__year=tahun)
                        .annotate(bulan=TruncMonth('created_at')).values('bulan')
                        .annotate(jumlah=Count('id')).order_by('bulan'))
         cust_map = {r['bulan'].month: r['jumlah'] for r in customer_qs}
-        data_customer_baru_per_bulan = [
-            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "jumlah_customer": cust_map.get(m, 0)}
+        customer_baru_per_bulan = [
+            {"bulan": MONTH_NAMES[m], "jumlah": cust_map.get(m, 0)}
             for m in range(1, 13)
         ]
+        total_customer_baru = sum(c['jumlah'] for c in customer_baru_per_bulan)
 
-        # ── 4. Breakdown pendapatan per layanan (year filter, Selesai) ────────
-        breakdown_pendapatan = {
-            "mazdafarm":     _sum_done_year(Pesanan,       'pembayaran'),
-            "mazdaging":     _sum_done_year(PesananDaging, 'pembayaran'),
-            "invest_ternak": _sum_done_year(PesananInvest, 'pembayaran'),
-        }
+        # ── 4. Breakdown Per Layanan ───────────────────────────────────────────
+        def calc_pct(val, total):
+            return float((val / total) * 100) if total > 0 else 0.0
 
-        # ── 5. Piutang – outstanding receivables (status = Diproses) ─────────
+        breakdown_per_layanan = [
+            {"layanan": "Mazdafarm", "total": mf_year, "persentase": calc_pct(mf_year, total_penjualan_tahun_aktif)},
+            {"layanan": "Mazdaging", "total": mg_year, "persentase": calc_pct(mg_year, total_penjualan_tahun_aktif)},
+            {"layanan": "Investernak", "total": iv_year, "persentase": calc_pct(iv_year, total_penjualan_tahun_aktif)},
+        ]
+
+        # ── 5. Piutang Aktif (Pesanan Diproses) ────────────────────────────────
         pf = _piutang(Pesanan,       'pembayaran')
         pg = _piutang(PesananDaging, 'pembayaran')
         pi = _piutang(PesananInvest, 'pembayaran')
-        piutang = {
-            "total_tagihan":             pf["tagihan"] + pg["tagihan"] + pi["tagihan"],
-            "total_menunggu_verifikasi": pf["menunggu_verifikasi"] + pg["menunggu_verifikasi"] + pi["menunggu_verifikasi"],
-            "detail": {"mazdafarm": pf, "mazdaging": pg, "invest_ternak": pi},
-        }
+
+        total_belum_bayar = pf["tagihan"] + pg["tagihan"] + pi["tagihan"]
+        total_menunggu_verif = pf["menunggu_verifikasi"] + pg["menunggu_verifikasi"] + pi["menunggu_verifikasi"]
+
+        piutang_per_layanan = [
+            {"layanan": "Mazdafarm", "belum_bayar": pf["tagihan"], "menunggu_verif": pf["menunggu_verifikasi"]},
+            {"layanan": "Mazdaging", "belum_bayar": pg["tagihan"], "menunggu_verif": pg["menunggu_verifikasi"]},
+            {"layanan": "Investernak", "belum_bayar": pi["tagihan"], "menunggu_verif": pi["menunggu_verifikasi"]},
+        ]
 
         return Response({
-            "tahun": tahun,
-            "total_pendapatan_keseluruhan": total_pendapatan_keseluruhan,
-            "breakdown_pendapatan": breakdown_pendapatan,
-            "piutang": piutang,
-            "data_penjualan_per_bulan": data_penjualan_per_bulan,
-            "data_customer_baru_per_bulan": data_customer_baru_per_bulan,
+            "filter_tahun": tahun,
+            "total_penjualan_tahun_aktif": total_penjualan_tahun_aktif,
+            "total_piutang": { "belum_bayar": total_belum_bayar, "menunggu_verif": total_menunggu_verif },
+            "total_customer_baru": total_customer_baru,
+            "penjualan_per_bulan": penjualan_per_bulan,
+            "customer_baru_per_bulan": customer_baru_per_bulan,
+            "breakdown_per_layanan": breakdown_per_layanan,
+            "piutang_per_layanan": piutang_per_layanan
         }, status=status.HTTP_200_OK)
 # ── CUSTOMER-FACING VIEWS (Read-Only, External) ────────────────────────────
 
