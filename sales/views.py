@@ -850,17 +850,18 @@ class FinancialDashboardView(APIView):
                 monthly_map[m] = monthly_map.get(m, Z) + (row['total'] or Z)
 
         data_penjualan_per_bulan = [
-            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "total_penjualan": float(monthly_map[m])}
-            for m in sorted(monthly_map.keys())
+            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "total_penjualan": float(monthly_map.get(m, Z))}
+            for m in range(1, 13)
         ]
 
         # ── 3. Customer baru per bulan (year filter) ──────────────────────────
         customer_qs = (User.objects.filter(role='Customer', deleted_at__isnull=True, created_at__year=tahun)
                        .annotate(bulan=TruncMonth('created_at')).values('bulan')
                        .annotate(jumlah=Count('id')).order_by('bulan'))
+        cust_map = {r['bulan'].month: r['jumlah'] for r in customer_qs}
         data_customer_baru_per_bulan = [
-            {"bulan": MONTH_NAMES[r['bulan'].month], "bulan_ke": r['bulan'].month, "jumlah_customer": r['jumlah']}
-            for r in customer_qs
+            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "jumlah_customer": cust_map.get(m, 0)}
+            for m in range(1, 13)
         ]
 
         # ── 4. Breakdown pendapatan per layanan (year filter, Selesai) ────────
