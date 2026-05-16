@@ -936,6 +936,9 @@ class CustomerOrderMazdafarmView(APIView):
 
         # List view dengan pagination
         queryset = self._get_base_queryset(request.user)
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status_pesanan=status_filter)
 
         paginator = OrderPagination()
         page = paginator.paginate_queryset(queryset, request)
@@ -980,6 +983,9 @@ class CustomerOrderMazdagingView(APIView):
 
         # List view dengan pagination
         queryset = self._get_base_queryset(request.user)
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status_pesanan=status_filter)
 
         paginator = OrderPagination()
         page = paginator.paginate_queryset(queryset, request)
@@ -1135,6 +1141,10 @@ class OrderInvestExternalView(APIView):
             .prefetch_related('items__invest')
             .order_by('-created_at')
         )
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status_pesanan=status_filter)
+            
         serializer = PesananInvestExternalSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
