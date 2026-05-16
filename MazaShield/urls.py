@@ -15,6 +15,9 @@ urlpatterns = [
     path('api/finance/', include('sales.finance_urls')),
     path('api/', include('catalogs.urls.public_urls')),
 
+    # ── Customer External Order Endpoints (PBI-External-1, 2) ─────────────────
+    path('api/', include('sales.customer_urls')),
+
       # ── PBI-34: External Invest Order (Customer read-only) ────────────────────
     # GET /api/order/invest/ → Customer's own invest orders
     # GET /api/order/invest/<id>/laporan/ → Customer reads their investment report (PBI-38)
