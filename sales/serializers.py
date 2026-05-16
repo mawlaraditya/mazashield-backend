@@ -398,6 +398,14 @@ class CustomerPesananMazdagingSerializer(serializers.ModelSerializer):
     def get_total_item(self, obj):
         return len(obj.items.all())
 
+# ── PBI-39: Laporan Penjualan Serializer ──────────────────────────────────────
+class LaporanPenjualanItemSerializer(serializers.Serializer):
+    """PBI-39: Single completed order row for sales report."""
+    id_pesanan       = serializers.IntegerField()
+    nama_customer    = serializers.CharField()
+    jenis_layanan    = serializers.CharField()
+    total_tagihan    = serializers.DecimalField(max_digits=15, decimal_places=2)
+    tanggal_transaksi = serializers.DateTimeField()
 
 # ── PBI-34: External Invest Order Serializer (Customer read-only) ─────────────
 
@@ -511,5 +519,4 @@ class LaporanInvestasiSerializer(serializers.ModelSerializer):
                 'harga_beli': float(item.harga_sapi),
             })
         return result
-
 

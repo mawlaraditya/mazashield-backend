@@ -40,4 +40,9 @@ urlpatterns = [
     path('laporan-penjualan/', LaporanPenjualanView.as_view(), name='laporan-penjualan'),
 
     path('', include(router.urls)),
+
+    # ── PBI-39: Laporan Penjualan (Marketing/SuperAdmin) ─────────────────────
+    # GET /api/sales/laporan-penjualan/?start_date=&end_date=&jenis_layanan=&page=&limit=
+    path('laporan-penjualan/', LaporanPenjualanView.as_view(), name='laporan-penjualan'),
+
 ]

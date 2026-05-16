@@ -62,7 +62,6 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
 
-
     def get_queryset(self):
         """
         PBI-25: Read Internal Mazdafarm (Filter by status & created_at range)
@@ -84,8 +83,6 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(created_at__date__lte=end_date)
             
         return queryset
-
-
     def create(self, request, *args, **kwargs):
         """
         PBI-23: Create Order Mazdafarm
@@ -992,6 +989,7 @@ class CustomerOrderMazdagingView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+
 # ── PBI-37: Update Laporan Hasil Investasi (Marketing/SuperAdmin) ─────────────
 
 class LaporanInvestasiView(APIView):
@@ -1143,33 +1141,77 @@ class OrderInvestExternalView(APIView):
 
 # ── PBI-39: Laporan Penjualan (Marketing/SuperAdmin) ──────────────────────────
 
+
 class LaporanPenjualanView(APIView):
     """
     PBI-39: GET /api/sales/laporan-penjualan/
-    Returns a list of successful payments (verified) with filters.
+    Returns all completed orders (status = Selesai) across all 3 order types.
+    Supports filters: start_date, end_date, jenis_layanan.
+    Returns rekapitulasi: total_transaksi, total_customer_unik, total_pendapatan.
+    Supports pagination via ?page=&limit= query params.
     """
     permission_classes = [IsSuperAdminOrMarketing]
 
     def get(self, request):
-        from .models import RiwayatPembayaran
-        from .serializers import RiwayatPembayaranSerializer
-        from .views import OrderPagination
+        start_date    = request.query_params.get('start_date')
+        end_date      = request.query_params.get('end_date')
+        jenis_layanan = request.query_params.get('jenis_layanan')  # Mazdafarm | Mazdaging | Investernak
+        page          = int(request.query_params.get('page', 1))
+        limit         = min(int(request.query_params.get('limit', 10)), 100)
 
-        queryset = RiwayatPembayaran.objects.filter(status='Diterima')
+        orders = []
 
-        # Filters
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
-        jenis_layanan = request.query_params.get('jenis_layanan')
+        def _add_orders(model, payment_rel, jenis, label):
+            qs = model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True)
+            if start_date:
+                qs = qs.filter(created_at__date__gte=start_date)
+            if end_date:
+                qs = qs.filter(created_at__date__lte=end_date)
+            qs = qs.select_related('customer', payment_rel)
+            for o in qs:
+                payment = getattr(o, payment_rel)
+                orders.append({
+                    'id_pesanan':           o.id,
+                    'nama_customer':        o.customer.nama,
+                    'jenis_layanan':        jenis,
+                    # Konsisten dengan manajemen pesanan: tagihan = total bill
+                    'total_tagihan':        float(payment.tagihan),
+                    'sudah_dibayar':        float(payment.sudah_dibayar),
+                    'menunggu_persetujuan': float(payment.menunggu_persetujuan),
+                    'tanggal_transaksi':    o.created_at,
+                })
 
-        if start_date:
-            queryset = queryset.filter(tanggal_transfer__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(tanggal_transfer__lte=end_date)
-        if jenis_layanan:
-            queryset = queryset.filter(content_type__model=jenis_layanan)
+        if not jenis_layanan or jenis_layanan == 'Mazdafarm':
+            _add_orders(Pesanan,       'pembayaran', 'Mazdafarm',   'Pesanan Ternak')
+        if not jenis_layanan or jenis_layanan == 'Mazdaging':
+            _add_orders(PesananDaging, 'pembayaran', 'Mazdaging',   'Pesanan Daging')
+        if not jenis_layanan or jenis_layanan == 'Investernak':
+            _add_orders(PesananInvest, 'pembayaran', 'Investernak', 'Pesanan Invest Ternak')
 
-        paginator = OrderPagination()
-        page = paginator.paginate_queryset(queryset, request)
-        serializer = RiwayatPembayaranSerializer(page, many=True, context={'request': request})
-        return paginator.get_paginated_response(serializer.data)
+        # Sort by date descending
+        orders.sort(key=lambda x: x['tanggal_transaksi'], reverse=True)
+
+        # Rekapitulasi
+        total_pendapatan    = sum(o['total_tagihan'] for o in orders)
+        customer_unik       = len(set(o['nama_customer'] for o in orders))
+        total_transaksi     = len(orders)
+
+        # Pagination
+        offset        = (page - 1) * limit
+        paginated     = orders[offset: offset + limit]
+        total_pages   = (total_transaksi + limit - 1) // limit if total_transaksi else 1
+
+        return Response({
+            "rekapitulasi": {
+                "total_jumlah_transaksi": total_transaksi,
+                "total_customer_unik":    customer_unik,
+                "total_pendapatan":       total_pendapatan,
+            },
+            "pagination": {
+                "page":        page,
+                "limit":       limit,
+                "total_pages": total_pages,
+                "total_items": total_transaksi,
+            },
+            "data": paginated,
+        }, status=status.HTTP_200_OK)
