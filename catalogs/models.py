@@ -32,11 +32,6 @@ class Ternak(models.Model):
         ('Sold', 'Sold'),
     ]
     
-    JENIS_CHOICES = [
-        ('Sapi', 'Sapi'),
-        ('Kambing', 'Kambing'),
-    ]
-
     KELAS_CHOICES = [
         ('A', 'Kelas A'),
         ('B', 'Kelas B'),
@@ -48,7 +43,7 @@ class Ternak(models.Model):
 
     id_ternak = models.CharField(max_length=50, unique=True, default=generate_ternak_id, editable=False)
     nama = models.CharField(max_length=255)
-    jenis = models.CharField(max_length=100, choices=JENIS_CHOICES, default='Sapi')
+    jenis = models.CharField(max_length=100, default='Sapi')
     kelas = models.CharField(max_length=20, choices=KELAS_CHOICES, null=True, blank=True)
     berat = models.DecimalField(max_digits=10, decimal_places=2)
     tanggal_penimbangan = models.DateField(default=datetime.date.today)
