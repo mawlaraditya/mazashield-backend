@@ -1050,8 +1050,8 @@ class LaporanInvestasiBeratView(APIView):
         except PesananInvest.DoesNotExist:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        if pesanan.status_pesanan != 'Processed':
-            return Response({"detail": "Input berat mingguan hanya tersedia selama status pesanan = Diproses."}, status=status.HTTP_400_BAD_REQUEST)
+        if pesanan.status_pesanan not in ['Processed', 'Confirmed']:
+            return Response({"detail": "Input berat mingguan hanya tersedia selama status pesanan = Processed atau Confirmed."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = HistoriBeratInputSerializer(data=request.data)
         if not serializer.is_valid():
