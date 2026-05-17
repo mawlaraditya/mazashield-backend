@@ -121,7 +121,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                     ternak = ternak_map.get(tid)
                     if not ternak:
                         return Response({"detail": f"Ternak {tid} tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-                    if ternak.status_ternak != 'Tersedia':
+                    if ternak.status_ternak != 'Available':
                         return Response({"detail": f"Ternak {tid} tidak tersedia."}, status=status.HTTP_400_BAD_REQUEST)
                     
                     ternaks.append(ternak)
@@ -131,7 +131,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 pesanan = Pesanan.objects.create(
                     customer=customer,
                     catatan=catatan,
-                    status_pesanan='Pending',
+                    status_pesanan='Processed',
                     updated_at=timezone.now()
                 )
 
@@ -149,7 +149,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
 
                 # Optimized: Bulk update Ternak status
                 for ternak in ternaks:
-                    ternak.status_ternak = 'Dipesan'
+                    ternak.status_ternak = 'Booked'
                 Ternak.objects.bulk_update(ternaks, ['status_ternak'])
 
                 # Create Pembayaran
@@ -180,7 +180,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
         catatan = request.data.get('catatan', instance.catatan)
         
         # 2. Status validity
-        if new_status not in ['Pending', 'Completed', 'Cancelled']:
+        if new_status not in ['Processed', 'Completed', 'Cancelled']:
              return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 3. Payment Validation for Selesai
@@ -208,12 +208,12 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                     
                     # Optimized: Bulk update Ternak status
                     for item in items:
-                        item.ternak.status_ternak = 'Terjual'
+                        item.ternak.status_ternak = 'Sold'
                     Ternak.objects.bulk_update([item.ternak for item in items], ['status_ternak'])
                 elif new_status == 'Cancelled':
                     # Optimized: Bulk update Ternak status
                     for item in items:
-                        item.ternak.status_ternak = 'Tersedia'
+                        item.ternak.status_ternak = 'Available'
                     Ternak.objects.bulk_update([item.ternak for item in items], ['status_ternak'])
                     
                     # Reset payment expectations
@@ -329,7 +329,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 pesanan = PesananDaging.objects.create(
                     customer=customer,
                     catatan=catatan,
-                    status_pesanan='Pending',
+                    status_pesanan='Processed',
                     updated_at=timezone.now()
                 )
 
@@ -375,7 +375,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         new_status = request.data.get('status_pesanan', instance.status_pesanan)
         catatan = request.data.get('catatan', instance.catatan)
 
-        if new_status not in ['Pending', 'Completed', 'Cancelled']:
+        if new_status not in ['Processed', 'Completed', 'Cancelled']:
             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. Payment Validation for Selesai
@@ -507,7 +507,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                 pesanan = PesananInvest.objects.create(
                     customer=customer,
                     catatan=catatan,
-                    status_pesanan='Pending',
+                    status_pesanan='Processed',
                     updated_at=timezone.now(),
                 )
 
@@ -555,7 +555,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         new_status = request.data.get('status_pesanan', instance.status_pesanan)
         catatan = request.data.get('catatan', instance.catatan)
 
-        if new_status not in ['Pending', 'Completed', 'Cancelled']:
+        if new_status not in ['Processed', 'Completed', 'Cancelled']:
             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. Payment Validation for Selesai
@@ -832,7 +832,7 @@ class FinancialDashboardView(APIView):
                     .annotate(total=Sum(f'{rel}__sudah_dibayar')).order_by('bulan'))
 
         def _piutang(model, rel):
-            agg = (model.objects.filter(status_pesanan='Pending', deleted_at__isnull=True)
+            agg = (model.objects.filter(status_pesanan='Processed', deleted_at__isnull=True)
                    .aggregate(tagihan=Sum(f'{rel}__tagihan'), menunggu=Sum(f'{rel}__menunggu_persetujuan')))
             return {"tagihan": float(agg['tagihan'] or Z), "menunggu_verifikasi": float(agg['menunggu'] or Z)}
 
@@ -1050,7 +1050,7 @@ class LaporanInvestasiBeratView(APIView):
         except PesananInvest.DoesNotExist:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        if pesanan.status_pesanan != 'Pending':
+        if pesanan.status_pesanan != 'Processed':
             return Response({"detail": "Input berat mingguan hanya tersedia selama status pesanan = Diproses."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = HistoriBeratInputSerializer(data=request.data)

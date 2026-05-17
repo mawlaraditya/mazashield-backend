@@ -28,7 +28,7 @@ def generate_invest_id():
 class Ternak(models.Model):
     STATUS_CHOICES = [
         ('Available', 'Available'),
-        ('Reserved', 'Reserved'),
+        ('Booked', 'Booked'),
         ('Sold', 'Sold'),
     ]
     
