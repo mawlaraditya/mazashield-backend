@@ -844,13 +844,27 @@ class FinancialDashboardView(APIView):
 
         # ── 2. Penjualan Per Bulan ─────────────────────────────────────────────
         monthly_map = {}
-        for qs in [_monthly(Pesanan,'pembayaran'), _monthly(PesananDaging,'pembayaran'), _monthly(PesananInvest,'pembayaran')]:
+        
+        for name, qs in [('mazdafarm', _monthly(Pesanan,'pembayaran')), 
+                         ('mazdaging', _monthly(PesananDaging,'pembayaran')), 
+                         ('investernak', _monthly(PesananInvest,'pembayaran'))]:
             for row in qs:
                 m = row['bulan'].month
-                monthly_map[m] = monthly_map.get(m, Z) + (row['total'] or Z)
+                if m not in monthly_map:
+                    monthly_map[m] = {'total': Z, 'mazdafarm': Z, 'mazdaging': Z, 'investernak': Z}
+                
+                val = row['total'] or Z
+                monthly_map[m][name] += val
+                monthly_map[m]['total'] += val
 
         penjualan_per_bulan = [
-            {"bulan": MONTH_NAMES[m], "total": float(monthly_map.get(m, Z))}
+            {
+                "bulan": MONTH_NAMES[m], 
+                "total": float(monthly_map.get(m, {}).get('total', Z)),
+                "mazdafarm": float(monthly_map.get(m, {}).get('mazdafarm', Z)),
+                "mazdaging": float(monthly_map.get(m, {}).get('mazdaging', Z)),
+                "investernak": float(monthly_map.get(m, {}).get('investernak', Z))
+            }
             for m in range(1, 13)
         ]
 
