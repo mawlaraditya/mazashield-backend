@@ -422,7 +422,7 @@ class OrderItemInvestExternalSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItemInvest
-        fields = ['id_invest', 'nama', 'berat', 'umur', 'harga_beli', 'harga_jual_per_kg', 'target_berat_kg', 'foto', 'status_investernak']
+        fields = ['id_invest', 'nama', 'berat', 'umur', 'harga_beli', 'harga_jual_per_kg', 'foto', 'status_investernak']
 
     def get_umur(self, obj):
         """Durasi investasi dalam hari dari katalog."""
