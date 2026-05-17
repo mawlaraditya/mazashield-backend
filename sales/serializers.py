@@ -97,7 +97,7 @@ class OrderUpdateSerializer(serializers.ModelSerializer):
         fields = ['status_pesanan', 'catatan']
     
     def validate_status_pesanan(self, value):
-        if value not in ['Processed', 'Confirmed', 'Completed', 'Cancelled']:
+        if value not in ['Processed', 'Completed', 'Cancelled']:
             raise serializers.ValidationError("Status pesanan tidak valid.")
         return value
     
@@ -267,7 +267,7 @@ class OrderInvestUpdateSerializer(serializers.ModelSerializer):
         fields = ['status_pesanan', 'catatan']
 
     def validate_status_pesanan(self, value):
-        if value not in ['Processed', 'Confirmed', 'Completed', 'Cancelled']:
+        if value not in ['Processed', 'Completed', 'Cancelled']:
             raise serializers.ValidationError("Status pesanan tidak valid.")
         return value
 

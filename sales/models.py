@@ -8,8 +8,7 @@ from catalogs.models import Ternak, Invest
 class Pesanan(models.Model):
     STATUS_CHOICES = [
         ('Processed', 'Processed'),
-        ('Confirmed', 'Confirmed'),
-        ('Completed', 'Completed'),
+                ('Completed', 'Completed'),
         ('Cancelled', 'Cancelled'),
     ]
 
@@ -53,8 +52,7 @@ class Pembayaran(models.Model):
 class PesananDaging(models.Model):
     STATUS_CHOICES = [
         ('Processed', 'Processed'),
-        ('Confirmed', 'Confirmed'),
-        ('Completed', 'Completed'),
+                ('Completed', 'Completed'),
         ('Cancelled', 'Cancelled'),
     ]
 
@@ -100,8 +98,7 @@ class PembayaranDaging(models.Model):
 class PesananInvest(models.Model):
     STATUS_CHOICES = [
         ('Processed', 'Processed'),
-        ('Confirmed', 'Confirmed'),
-        ('Completed', 'Completed'),
+                ('Completed', 'Completed'),
         ('Cancelled', 'Cancelled'),
     ]
 
