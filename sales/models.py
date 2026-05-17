@@ -192,6 +192,9 @@ class LaporanInvestasi(models.Model):
 
     # Harga jual per kg yang digunakan untuk estimasi (diinput oleh Marketing)
     harga_jual_per_kg = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    # Target panen (berat yang diharapkan di akhir)
+    target_berat_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
 
     # ── Perhitungan akhir (diisi saat status_pesanan = Selesai) ──────────────
     harga_jual_aktual    = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)

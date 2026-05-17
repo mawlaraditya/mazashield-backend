@@ -1058,12 +1058,19 @@ class LaporanInvestasiBeratView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+
         if 'harga_jual_per_kg' in request.data:
             try:
                 import decimal
                 laporan.harga_jual_per_kg = decimal.Decimal(str(request.data['harga_jual_per_kg']))
-                laporan.save()
             except Exception: pass
+        if 'target_berat_kg' in request.data:
+            try:
+                import decimal
+                laporan.target_berat_kg = decimal.Decimal(str(request.data['target_berat_kg']))
+            except Exception: pass
+        laporan.save()
+
 
         HistoriBerat.objects.create(
             laporan=laporan,
