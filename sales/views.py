@@ -121,7 +121,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                     ternak = ternak_map.get(tid)
                     if not ternak:
                         return Response({"detail": f"Ternak {tid} tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-                    if ternak.status_ternak != 'Tersedia':
+                    if ternak.status_ternak != 'Available':
                         return Response({"detail": f"Ternak {tid} tidak tersedia."}, status=status.HTTP_400_BAD_REQUEST)
                     
                     ternaks.append(ternak)
@@ -131,7 +131,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 pesanan = Pesanan.objects.create(
                     customer=customer,
                     catatan=catatan,
-                    status_pesanan='Diproses',
+                    status_pesanan='Processed',
                     updated_at=timezone.now()
                 )
 
@@ -149,7 +149,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
 
                 # Optimized: Bulk update Ternak status
                 for ternak in ternaks:
-                    ternak.status_ternak = 'Dipesan'
+                    ternak.status_ternak = 'Booked'
                 Ternak.objects.bulk_update(ternaks, ['status_ternak'])
 
                 # Create Pembayaran
@@ -173,18 +173,18 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
         instance = self.get_object_or_404_by_id(kwargs.get('pk'))
         
         # 1. Block transition FROM Selesai/Dibatalkan
-        if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
+        if instance.status_pesanan in ['Completed', 'Cancelled']:
             return Response({"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."}, status=status.HTTP_400_BAD_REQUEST)
 
         new_status = request.data.get('status_pesanan', instance.status_pesanan)
         catatan = request.data.get('catatan', instance.catatan)
         
         # 2. Status validity
-        if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
+        if new_status not in ['Processed', 'Completed', 'Cancelled']:
              return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 3. Payment Validation for Selesai
-        if new_status == 'Selesai':
+        if new_status == 'Completed':
             pembayaran = instance.pembayaran
             if pembayaran.tagihan > 0 or pembayaran.menunggu_persetujuan > 0:
                 return Response({"detail": "Status tidak bisa diubah ke Selesai: Masih ada sisa tagihan atau pembayaran menunggu verifikasi finance."}, status=status.HTTP_400_BAD_REQUEST)
@@ -198,7 +198,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 
                 # Sync stock and payment logs
                 items = instance.items.all()
-                if new_status == 'Selesai':
+                if new_status == 'Completed':
                     # Fill payment data (though strictly should be 0 remainder already)
                     pembayaran = instance.pembayaran
                     pembayaran.sudah_dibayar += (pembayaran.tagihan + pembayaran.menunggu_persetujuan)
@@ -208,12 +208,12 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                     
                     # Optimized: Bulk update Ternak status
                     for item in items:
-                        item.ternak.status_ternak = 'Terjual'
+                        item.ternak.status_ternak = 'Sold'
                     Ternak.objects.bulk_update([item.ternak for item in items], ['status_ternak'])
-                elif new_status == 'Dibatalkan':
+                elif new_status == 'Cancelled':
                     # Optimized: Bulk update Ternak status
                     for item in items:
-                        item.ternak.status_ternak = 'Tersedia'
+                        item.ternak.status_ternak = 'Available'
                     Ternak.objects.bulk_update([item.ternak for item in items], ['status_ternak'])
                     
                     # Reset payment expectations
@@ -329,7 +329,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 pesanan = PesananDaging.objects.create(
                     customer=customer,
                     catatan=catatan,
-                    status_pesanan='Diproses',
+                    status_pesanan='Processed',
                     updated_at=timezone.now()
                 )
 
@@ -369,17 +369,17 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         instance = self.get_object_or_404_by_id(kwargs.get('pk'))
         
         # 1. Block transition FROM Selesai/Dibatalkan
-        if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
+        if instance.status_pesanan in ['Completed', 'Cancelled']:
             return Response({"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."}, status=status.HTTP_400_BAD_REQUEST)
 
         new_status = request.data.get('status_pesanan', instance.status_pesanan)
         catatan = request.data.get('catatan', instance.catatan)
 
-        if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
+        if new_status not in ['Processed', 'Completed', 'Cancelled']:
             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. Payment Validation for Selesai
-        if new_status == 'Selesai':
+        if new_status == 'Completed':
             pembayaran = instance.pembayaran
             if pembayaran.tagihan > 0 or pembayaran.menunggu_persetujuan > 0:
                 return Response({"detail": "Status tidak bisa diubah ke Selesai: Masih ada sisa tagihan atau pembayaran menunggu verifikasi finance."}, status=status.HTTP_400_BAD_REQUEST)
@@ -392,7 +392,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 instance.updated_by = request.user
                 
                 items = instance.items.all()
-                if new_status == 'Selesai':
+                if new_status == 'Completed':
                     pembayaran = instance.pembayaran
                     pembayaran.sudah_dibayar += (pembayaran.tagihan + pembayaran.menunggu_persetujuan)
                     pembayaran.tagihan = 0
@@ -403,7 +403,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                     for item in items:
                         item.daging.status_daging = 'Terjual'
                     Daging.objects.bulk_update([item.daging for item in items], ['status_daging'])
-                elif new_status == 'Dibatalkan':
+                elif new_status == 'Cancelled':
                     for item in items:
                         item.daging.status_daging = 'Tersedia'
                     Daging.objects.bulk_update([item.daging for item in items], ['status_daging'])
@@ -507,7 +507,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                 pesanan = PesananInvest.objects.create(
                     customer=customer,
                     catatan=catatan,
-                    status_pesanan='Diproses',
+                    status_pesanan='Processed',
                     updated_at=timezone.now(),
                 )
 
@@ -546,7 +546,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         instance = self._get_pesanan_or_404(kwargs.get('pk'))
 
         # 1. Block transition FROM Selesai/Dibatalkan
-        if instance.status_pesanan in ['Selesai', 'Dibatalkan']:
+        if instance.status_pesanan in ['Completed', 'Cancelled']:
             return Response(
                 {"detail": "Pesanan yang sudah selesai atau dibatalkan tidak dapat diupdate kembali."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -555,11 +555,11 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
         new_status = request.data.get('status_pesanan', instance.status_pesanan)
         catatan = request.data.get('catatan', instance.catatan)
 
-        if new_status not in ['Diproses', 'Selesai', 'Dibatalkan']:
+        if new_status not in ['Processed', 'Completed', 'Cancelled']:
             return Response({"detail": "Status pesanan tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. Payment Validation for Selesai
-        if new_status == 'Selesai':
+        if new_status == 'Completed':
             pembayaran = instance.pembayaran
             if pembayaran.tagihan > 0 or pembayaran.menunggu_persetujuan > 0:
                 return Response({"detail": "Status tidak bisa diubah ke Selesai: Masih ada sisa tagihan atau pembayaran menunggu verifikasi finance."}, status=status.HTTP_400_BAD_REQUEST)
@@ -572,7 +572,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                 instance.updated_by = request.user
                 
                 items = instance.items.all()
-                if new_status == 'Selesai':
+                if new_status == 'Completed':
                     pembayaran = instance.pembayaran
                     pembayaran.sudah_dibayar += (pembayaran.tagihan + pembayaran.menunggu_persetujuan)
                     pembayaran.tagihan = 0
@@ -583,7 +583,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
                     for item in items:
                         item.invest.status_investernak = 'Closed'
                     Invest.objects.bulk_update([item.invest for item in items], ['status_investernak'])
-                elif new_status == 'Dibatalkan':
+                elif new_status == 'Cancelled':
                     for item in items:
                         item.invest.status_investernak = 'Open'
                     Invest.objects.bulk_update([item.invest for item in items], ['status_investernak'])
@@ -665,7 +665,7 @@ class PaymentUpdateView(APIView):
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
         # 3. Validate order status
-        if order.status_pesanan == 'Dibatalkan':
+        if order.status_pesanan == 'Cancelled':
             return Response({"detail": "Pesanan sudah dibatalkan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 4. Validate nominal <= tagihan
@@ -688,7 +688,7 @@ class PaymentUpdateView(APIView):
                     tanggal_transfer=request.data['tanggal_transfer'],
                     waktu_transfer=request.data['waktu_transfer'],
                     catatan=request.data.get('catatan', ''),
-                    status='Menunggu Verifikasi',
+                    status='Waiting',
                     created_by=request.user
                 )
 
@@ -711,12 +711,12 @@ class PaymentVerifyView(APIView):
         except RiwayatPembayaran.DoesNotExist:
             return Response({"detail": "Data pembayaran tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        if riwayat.status != 'Menunggu Verifikasi':
+        if riwayat.status != 'Waiting':
             return Response({"detail": "Pembayaran ini sudah diverifikasi."}, status=status.HTTP_400_BAD_REQUEST)
         
         # 2. Validate decisions
         keputusan = request.data.get('keputusan')
-        if keputusan not in ['Diterima', 'Ditolak']:
+        if keputusan not in ['Paid', 'Unpaid']:
             return Response({"detail": "Keputusan wajib Diterima atau Ditolak."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 3. Get associated pembayaran
@@ -732,17 +732,17 @@ class PaymentVerifyView(APIView):
 
         try:
             with transaction.atomic():
-                if keputusan == 'Diterima':
+                if keputusan == 'Paid':
                     pembayaran.sudah_dibayar += riwayat.nominal_pembayaran
                     pembayaran.menunggu_persetujuan -= riwayat.nominal_pembayaran
-                    riwayat.status = 'Diterima'
+                    riwayat.status = 'Paid'
                     
                     # Logic: If tagihan is 0, this order is effectively fully paid (ready to be Selesai)
                     ready_to_complete = (pembayaran.tagihan == 0 and pembayaran.menunggu_persetujuan == 0)
                 else:
                     pembayaran.tagihan += riwayat.nominal_pembayaran
                     pembayaran.menunggu_persetujuan -= riwayat.nominal_pembayaran
-                    riwayat.status = 'Ditolak'
+                    riwayat.status = 'Unpaid'
                     ready_to_complete = False
                 
                 pembayaran.save()
@@ -818,75 +818,100 @@ class FinancialDashboardView(APIView):
 
         # ── helpers ─────────────────────────────────────────────────────────
         def _sum_done(model, rel):
-            return float(model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True)
+            return float(model.objects.filter(status_pesanan='Completed', deleted_at__isnull=True)
                          .aggregate(t=Sum(f'{rel}__sudah_dibayar'))['t'] or Z)
 
         def _sum_done_year(model, rel):
-            return float(model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True, created_at__year=tahun)
+            return float(model.objects.filter(status_pesanan='Completed', deleted_at__isnull=True, created_at__year=tahun)
                          .aggregate(t=Sum(f'{rel}__sudah_dibayar'))['t'] or Z)
 
         def _monthly(model, rel):
             return (model.objects
-                    .filter(status_pesanan='Selesai', deleted_at__isnull=True, created_at__year=tahun)
+                    .filter(status_pesanan='Completed', deleted_at__isnull=True, created_at__year=tahun)
                     .annotate(bulan=TruncMonth('created_at')).values('bulan')
                     .annotate(total=Sum(f'{rel}__sudah_dibayar')).order_by('bulan'))
 
         def _piutang(model, rel):
-            agg = (model.objects.filter(status_pesanan='Diproses', deleted_at__isnull=True)
+            agg = (model.objects.filter(status_pesanan='Processed', deleted_at__isnull=True)
                    .aggregate(tagihan=Sum(f'{rel}__tagihan'), menunggu=Sum(f'{rel}__menunggu_persetujuan')))
             return {"tagihan": float(agg['tagihan'] or Z), "menunggu_verifikasi": float(agg['menunggu'] or Z)}
 
-        # ── 1. Total pendapatan keseluruhan (all-time) ────────────────────────
-        mf_all = _sum_done(Pesanan,       'pembayaran')
-        mg_all = _sum_done(PesananDaging, 'pembayaran')
-        iv_all = _sum_done(PesananInvest, 'pembayaran')
-        total_pendapatan_keseluruhan = mf_all + mg_all + iv_all
+        # ── 1. Total Penjualan Tahun Aktif (PBI-39 equivalent) ───────────────────
+        mf_year = _sum_done_year(Pesanan,       'pembayaran')
+        mg_year = _sum_done_year(PesananDaging, 'pembayaran')
+        iv_year = _sum_done_year(PesananInvest, 'pembayaran')
+        total_penjualan_tahun_aktif = mf_year + mg_year + iv_year
 
-        # ── 2. Penjualan per bulan (year filter) ─────────────────────────────
+        # ── 2. Penjualan Per Bulan ─────────────────────────────────────────────
         monthly_map = {}
-        for qs in [_monthly(Pesanan,'pembayaran'), _monthly(PesananDaging,'pembayaran'), _monthly(PesananInvest,'pembayaran')]:
+        
+        for name, qs in [('mazdafarm', _monthly(Pesanan,'pembayaran')), 
+                         ('mazdaging', _monthly(PesananDaging,'pembayaran')), 
+                         ('investernak', _monthly(PesananInvest,'pembayaran'))]:
             for row in qs:
                 m = row['bulan'].month
-                monthly_map[m] = monthly_map.get(m, Z) + (row['total'] or Z)
+                if m not in monthly_map:
+                    monthly_map[m] = {'total': Z, 'mazdafarm': Z, 'mazdaging': Z, 'investernak': Z}
+                
+                val = row['total'] or Z
+                monthly_map[m][name] += val
+                monthly_map[m]['total'] += val
 
-        data_penjualan_per_bulan = [
-            {"bulan": MONTH_NAMES[m], "bulan_ke": m, "total_penjualan": float(monthly_map[m])}
-            for m in sorted(monthly_map.keys())
+        penjualan_per_bulan = [
+            {
+                "bulan": MONTH_NAMES[m], 
+                "total": float(monthly_map.get(m, {}).get('total', Z)),
+                "mazdafarm": float(monthly_map.get(m, {}).get('mazdafarm', Z)),
+                "mazdaging": float(monthly_map.get(m, {}).get('mazdaging', Z)),
+                "investernak": float(monthly_map.get(m, {}).get('investernak', Z))
+            }
+            for m in range(1, 13)
         ]
 
-        # ── 3. Customer baru per bulan (year filter) ──────────────────────────
+        # ── 3. Customer Baru Per Bulan ─────────────────────────────────────────
         customer_qs = (User.objects.filter(role='Customer', deleted_at__isnull=True, created_at__year=tahun)
                        .annotate(bulan=TruncMonth('created_at')).values('bulan')
                        .annotate(jumlah=Count('id')).order_by('bulan'))
-        data_customer_baru_per_bulan = [
-            {"bulan": MONTH_NAMES[r['bulan'].month], "bulan_ke": r['bulan'].month, "jumlah_customer": r['jumlah']}
-            for r in customer_qs
+        cust_map = {r['bulan'].month: r['jumlah'] for r in customer_qs}
+        customer_baru_per_bulan = [
+            {"bulan": MONTH_NAMES[m], "jumlah": cust_map.get(m, 0)}
+            for m in range(1, 13)
+        ]
+        total_customer_baru = sum(c['jumlah'] for c in customer_baru_per_bulan)
+
+        # ── 4. Breakdown Per Layanan ───────────────────────────────────────────
+        def calc_pct(val, total):
+            return float((val / total) * 100) if total > 0 else 0.0
+
+        breakdown_per_layanan = [
+            {"layanan": "Mazdafarm", "total": mf_year, "persentase": calc_pct(mf_year, total_penjualan_tahun_aktif)},
+            {"layanan": "Mazdaging", "total": mg_year, "persentase": calc_pct(mg_year, total_penjualan_tahun_aktif)},
+            {"layanan": "Investernak", "total": iv_year, "persentase": calc_pct(iv_year, total_penjualan_tahun_aktif)},
         ]
 
-        # ── 4. Breakdown pendapatan per layanan (year filter, Selesai) ────────
-        breakdown_pendapatan = {
-            "mazdafarm":     _sum_done_year(Pesanan,       'pembayaran'),
-            "mazdaging":     _sum_done_year(PesananDaging, 'pembayaran'),
-            "invest_ternak": _sum_done_year(PesananInvest, 'pembayaran'),
-        }
-
-        # ── 5. Piutang – outstanding receivables (status = Diproses) ─────────
+        # ── 5. Piutang Aktif (Pesanan Diproses) ────────────────────────────────
         pf = _piutang(Pesanan,       'pembayaran')
         pg = _piutang(PesananDaging, 'pembayaran')
         pi = _piutang(PesananInvest, 'pembayaran')
-        piutang = {
-            "total_tagihan":             pf["tagihan"] + pg["tagihan"] + pi["tagihan"],
-            "total_menunggu_verifikasi": pf["menunggu_verifikasi"] + pg["menunggu_verifikasi"] + pi["menunggu_verifikasi"],
-            "detail": {"mazdafarm": pf, "mazdaging": pg, "invest_ternak": pi},
-        }
+
+        total_belum_bayar = pf["tagihan"] + pg["tagihan"] + pi["tagihan"]
+        total_menunggu_verif = pf["menunggu_verifikasi"] + pg["menunggu_verifikasi"] + pi["menunggu_verifikasi"]
+
+        piutang_per_layanan = [
+            {"layanan": "Mazdafarm", "belum_bayar": pf["tagihan"], "menunggu_verif": pf["menunggu_verifikasi"]},
+            {"layanan": "Mazdaging", "belum_bayar": pg["tagihan"], "menunggu_verif": pg["menunggu_verifikasi"]},
+            {"layanan": "Investernak", "belum_bayar": pi["tagihan"], "menunggu_verif": pi["menunggu_verifikasi"]},
+        ]
 
         return Response({
-            "tahun": tahun,
-            "total_pendapatan_keseluruhan": total_pendapatan_keseluruhan,
-            "breakdown_pendapatan": breakdown_pendapatan,
-            "piutang": piutang,
-            "data_penjualan_per_bulan": data_penjualan_per_bulan,
-            "data_customer_baru_per_bulan": data_customer_baru_per_bulan,
+            "filter_tahun": tahun,
+            "total_penjualan_tahun_aktif": total_penjualan_tahun_aktif,
+            "total_piutang": { "belum_bayar": total_belum_bayar, "menunggu_verif": total_menunggu_verif },
+            "total_customer_baru": total_customer_baru,
+            "penjualan_per_bulan": penjualan_per_bulan,
+            "customer_baru_per_bulan": customer_baru_per_bulan,
+            "breakdown_per_layanan": breakdown_per_layanan,
+            "piutang_per_layanan": piutang_per_layanan
         }, status=status.HTTP_200_OK)
 # ── CUSTOMER-FACING VIEWS (Read-Only, External) ────────────────────────────
 
@@ -936,6 +961,9 @@ class CustomerOrderMazdafarmView(APIView):
 
         # List view dengan pagination
         queryset = self._get_base_queryset(request.user)
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status_pesanan=status_filter)
 
         paginator = OrderPagination()
         page = paginator.paginate_queryset(queryset, request)
@@ -980,6 +1008,9 @@ class CustomerOrderMazdagingView(APIView):
 
         # List view dengan pagination
         queryset = self._get_base_queryset(request.user)
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status_pesanan=status_filter)
 
         paginator = OrderPagination()
         page = paginator.paginate_queryset(queryset, request)
@@ -1033,20 +1064,27 @@ class LaporanInvestasiBeratView(APIView):
         except PesananInvest.DoesNotExist:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        if pesanan.status_pesanan != 'Diproses':
-            return Response({"detail": "Input berat mingguan hanya tersedia selama status pesanan = Diproses."}, status=status.HTTP_400_BAD_REQUEST)
+        if pesanan.status_pesanan not in ['Processed']:
+            return Response({"detail": "Input berat mingguan hanya tersedia selama status pesanan = Processed."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = HistoriBeratInputSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+
         if 'harga_jual_per_kg' in request.data:
             try:
                 import decimal
                 laporan.harga_jual_per_kg = decimal.Decimal(str(request.data['harga_jual_per_kg']))
-                laporan.save()
             except Exception: pass
+        if 'target_berat_kg' in request.data:
+            try:
+                import decimal
+                laporan.target_berat_kg = decimal.Decimal(str(request.data['target_berat_kg']))
+            except Exception: pass
+        laporan.save()
+
 
         HistoriBerat.objects.create(
             laporan=laporan,
@@ -1072,7 +1110,7 @@ class LaporanInvestasiAkhirView(APIView):
         except PesananInvest.DoesNotExist:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        if pesanan.status_pesanan != 'Selesai':
+        if pesanan.status_pesanan != 'Completed':
             return Response({"detail": "Perhitungan akhir hanya dapat disimpan ketika status pesanan = Selesai."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = PerhitunganAkhirSerializer(data=request.data)
@@ -1106,10 +1144,10 @@ class LaporanInvestasiCustomerView(APIView):
         except PesananInvest.DoesNotExist:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
-        if pesanan.status_pesanan == 'Dibatalkan':
+        if pesanan.status_pesanan == 'Cancelled':
             return Response({
                 "id_pesanan": pesanan.id,
-                "status_pesanan": "Dibatalkan",
+                "status_pesanan": "Cancelled",
                 "detail": "Investasi ini telah dibatalkan. Tidak ada laporan hasil yang tersedia.",
             }, status=status.HTTP_200_OK)
 
@@ -1135,6 +1173,10 @@ class OrderInvestExternalView(APIView):
             .prefetch_related('items__invest')
             .order_by('-created_at')
         )
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status_pesanan=status_filter)
+            
         serializer = PesananInvestExternalSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -1162,7 +1204,7 @@ class LaporanPenjualanView(APIView):
         orders = []
 
         def _add_orders(model, payment_rel, jenis, label):
-            qs = model.objects.filter(status_pesanan='Selesai', deleted_at__isnull=True)
+            qs = model.objects.filter(status_pesanan='Completed', deleted_at__isnull=True)
             if start_date:
                 qs = qs.filter(created_at__date__gte=start_date)
             if end_date:
@@ -1174,8 +1216,8 @@ class LaporanPenjualanView(APIView):
                     'id_pesanan':           o.id,
                     'nama_customer':        o.customer.nama,
                     'jenis_layanan':        jenis,
-                    # Konsisten dengan manajemen pesanan: tagihan = total bill
-                    'total_tagihan':        float(payment.tagihan),
+                    # Untuk pesanan selesai, tagihan = 0, jadi total asli = sudah_dibayar + tagihan + menunggu_persetujuan
+                    'total_tagihan':        float(payment.sudah_dibayar) + float(payment.tagihan) + float(payment.menunggu_persetujuan),
                     'sudah_dibayar':        float(payment.sudah_dibayar),
                     'menunggu_persetujuan': float(payment.menunggu_persetujuan),
                     'tanggal_transaksi':    o.created_at,

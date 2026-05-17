@@ -4,7 +4,20 @@ from django.db import models
 from django.utils import timezone
 
 def generate_ternak_id():
-    return f"TR-{uuid.uuid4().hex[:6].upper()}"
+    from catalogs.models import Ternak
+    now = timezone.now()
+    year = now.year
+    letter = chr(65 + (year - 2025))
+    last_ternak = Ternak.objects.filter(id_ternak__endswith=letter).order_by('-id_ternak').first()
+    if last_ternak:
+        try:
+            last_num = int(last_ternak.id_ternak[:-1])
+            new_num = last_num + 1
+        except ValueError:
+            new_num = 1
+    else:
+        new_num = 1
+    return f"{new_num:02d}{letter}"
 
 def generate_daging_id():
     return f"DG-{uuid.uuid4().hex[:6].upper()}"
@@ -14,16 +27,11 @@ def generate_invest_id():
 
 class Ternak(models.Model):
     STATUS_CHOICES = [
-        ('Tersedia', 'Tersedia'),
-        ('Dipesan', 'Dipesan'),
-        ('Terjual', 'Terjual'),
+        ('Available', 'Available'),
+        ('Booked', 'Booked'),
+        ('Sold', 'Sold'),
     ]
     
-    JENIS_CHOICES = [
-        ('Sapi', 'Sapi'),
-        ('Kambing', 'Kambing'),
-    ]
-
     KELAS_CHOICES = [
         ('A', 'Kelas A'),
         ('B', 'Kelas B'),
@@ -35,7 +43,7 @@ class Ternak(models.Model):
 
     id_ternak = models.CharField(max_length=50, unique=True, default=generate_ternak_id, editable=False)
     nama = models.CharField(max_length=255)
-    jenis = models.CharField(max_length=100, choices=JENIS_CHOICES, default='Sapi')
+    jenis = models.CharField(max_length=100, default='Sapi')
     kelas = models.CharField(max_length=20, choices=KELAS_CHOICES, null=True, blank=True)
     berat = models.DecimalField(max_digits=10, decimal_places=2)
     tanggal_penimbangan = models.DateField(default=datetime.date.today)
@@ -44,7 +52,7 @@ class Ternak(models.Model):
     harga = models.DecimalField(max_digits=15, decimal_places=2)
     deskripsi = models.TextField()
     foto = models.ImageField(upload_to='ternak/', null=True, blank=True)
-    status_ternak = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Tersedia')
+    status_ternak = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Available')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
