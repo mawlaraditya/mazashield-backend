@@ -156,7 +156,6 @@ class AdminUserListView(generics.ListAPIView):
             )
         return queryset
 
-
 # ─── PBI-7: Soft Delete User by Admin ────────────────────────────────────────
 class AdminUserDeleteView(APIView):
     permission_classes = [IsSuperAdmin]
