@@ -7,13 +7,14 @@ from catalogs.models import Ternak, Invest
 # ── MAZDAFARM ORDERS (PBI-23, PBI-24, PBI-25) ─────────────────────────
 class Pesanan(models.Model):
     STATUS_CHOICES = [
-        ('Diproses', 'Diproses'),
-        ('Selesai', 'Selesai'),
-        ('Dibatalkan', 'Dibatalkan'),
+        ('Pending', 'Pending'),
+        ('Confirmed', 'Confirmed'),
+        ('Completed', 'Completed'),
+        ('Cancelled', 'Cancelled'),
     ]
 
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pesanan_customer')
-    status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Diproses')
+    status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     catatan = models.TextField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -51,13 +52,14 @@ class Pembayaran(models.Model):
 # ── MAZDAGING ORDERS (PBI-27, PBI-28, PBI-29) ──────────────────────────
 class PesananDaging(models.Model):
     STATUS_CHOICES = [
-        ('Diproses', 'Diproses'),
-        ('Selesai', 'Selesai'),
-        ('Dibatalkan', 'Dibatalkan'),
+        ('Pending', 'Pending'),
+        ('Confirmed', 'Confirmed'),
+        ('Completed', 'Completed'),
+        ('Cancelled', 'Cancelled'),
     ]
 
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pesanan_daging_customer')
-    status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Diproses')
+    status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     catatan = models.TextField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -97,13 +99,14 @@ class PembayaranDaging(models.Model):
 # ── INVEST TERNAK ORDERS ────────────────────────────────────────────────────
 class PesananInvest(models.Model):
     STATUS_CHOICES = [
-        ('Diproses', 'Diproses'),
-        ('Selesai', 'Selesai'),
-        ('Dibatalkan', 'Dibatalkan'),
+        ('Pending', 'Pending'),
+        ('Confirmed', 'Confirmed'),
+        ('Completed', 'Completed'),
+        ('Cancelled', 'Cancelled'),
     ]
 
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pesanan_invest_customer')
-    status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Diproses')
+    status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     catatan = models.TextField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -141,9 +144,9 @@ class PembayaranInvest(models.Model):
 
 class RiwayatPembayaran(models.Model):
     STATUS_CHOICES = [
-        ('Menunggu Verifikasi', 'Menunggu Verifikasi'),
-        ('Diterima', 'Diterima'),
-        ('Ditolak', 'Ditolak'),
+        ('Waiting', 'Waiting'),
+        ('Paid', 'Paid'),
+        ('Unpaid', 'Unpaid'),
     ]
 
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
