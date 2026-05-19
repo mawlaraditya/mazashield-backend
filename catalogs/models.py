@@ -5,10 +5,19 @@ from django.utils import timezone
 
 def generate_ternak_id():
     from catalogs.models import Ternak
+    from django.db.models.functions import Length
     now = timezone.now()
     year = now.year
     letter = chr(65 + (year - 2025))
-    last_ternak = Ternak.objects.filter(id_ternak__endswith=letter).order_by('-id_ternak').first()
+    
+    last_ternak = Ternak.objects.filter(
+        id_ternak__endswith=letter
+    ).exclude(
+        id_ternak__startswith='TR-'
+    ).annotate(
+        id_len=Length('id_ternak')
+    ).order_by('-id_len', '-id_ternak').first()
+    
     if last_ternak:
         try:
             last_num = int(last_ternak.id_ternak[:-1])
@@ -17,7 +26,12 @@ def generate_ternak_id():
             new_num = 1
     else:
         new_num = 1
-    return f"{new_num:02d}{letter}"
+        
+    while True:
+        proposed_id = f"{new_num:02d}{letter}"
+        if not Ternak.objects.filter(id_ternak=proposed_id).exists():
+            return proposed_id
+        new_num += 1
 
 def generate_daging_id():
     return f"DG-{uuid.uuid4().hex[:6].upper()}"
