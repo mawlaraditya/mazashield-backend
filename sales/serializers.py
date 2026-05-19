@@ -415,14 +415,14 @@ class OrderItemInvestExternalSerializer(serializers.ModelSerializer):
     nama              = serializers.CharField(source='invest.nama_paket')
     berat             = serializers.DecimalField(source='invest.berat', max_digits=10, decimal_places=2, allow_null=True)
     umur              = serializers.SerializerMethodField()
-    harga_beli        = serializers.DecimalField(source='harga_sapi', max_digits=15, decimal_places=2)
+    harga_sapi        = serializers.DecimalField(max_digits=15, decimal_places=2)
     harga_jual_per_kg = serializers.DecimalField(source='invest.harga_jual', max_digits=15, decimal_places=2)
     foto              = serializers.ImageField(source='invest.foto', allow_null=True)
     status_investernak = serializers.CharField(source='invest.status_investernak')
 
     class Meta:
         model = OrderItemInvest
-        fields = ['id_invest', 'nama', 'berat', 'umur', 'harga_beli', 'harga_jual_per_kg', 'foto', 'status_investernak']
+        fields = ['id_invest', 'nama', 'berat', 'umur', 'harga_sapi', 'harga_jual_per_kg', 'foto', 'status_investernak']
 
     def get_umur(self, obj):
         """Durasi investasi dalam hari dari katalog."""
@@ -433,6 +433,7 @@ class PesananInvestExternalSerializer(serializers.ModelSerializer):
     """PBI-34: Serializer pesanan invest untuk customer (read-only)."""
     id_pesanan   = serializers.IntegerField(source='id', read_only=True)
     daftar_invest = OrderItemInvestExternalSerializer(source='items', many=True, read_only=True)
+    total_item            = serializers.SerializerMethodField()
     tagihan               = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
     sudah_dibayar         = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
     menunggu_persetujuan  = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
@@ -441,8 +442,11 @@ class PesananInvestExternalSerializer(serializers.ModelSerializer):
         model = PesananInvest
         fields = [
             'id_pesanan', 'status_pesanan', 'created_at',
-            'daftar_invest', 'tagihan', 'sudah_dibayar', 'menunggu_persetujuan',
+            'daftar_invest', 'total_item', 'tagihan', 'sudah_dibayar', 'menunggu_persetujuan',
         ]
+
+    def get_total_item(self, obj):
+        return len(obj.items.all())
 
 class HistoriBeratSerializer(serializers.ModelSerializer):
     """PBI-37/38: Histori berat mingguan."""
