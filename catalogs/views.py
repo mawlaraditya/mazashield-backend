@@ -26,6 +26,11 @@ class TernakInternalListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Ternak.objects.filter(deleted_at__isnull=True).order_by('-created_at')
 
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
+
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return TernakCreateSerializer
@@ -80,6 +85,11 @@ class DagingInternalListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Optimized: Added better ordering and ensuring lean queryset for list views
         return Daging.objects.filter(deleted_at__isnull=True).order_by('-created_at')
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -178,6 +188,11 @@ class InvestInternalListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return Invest.objects.filter(deleted_at__isnull=True)
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
