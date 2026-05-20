@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.db.models import Case, When, Value, IntegerField
 
 from accounts.permissions import IsMarketingOrSuperAdmin
 from .models import Ternak, Daging, Invest
@@ -132,7 +133,15 @@ class TernakPublicListView(generics.ListAPIView):
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Ternak.objects.filter(deleted_at__isnull=True, created_at__year=current_year).order_by('-created_at')
+        return Ternak.objects.filter(deleted_at__isnull=True, created_at__year=current_year).annotate(
+            status_order=Case(
+                When(status_ternak='Available', then=Value(1)),
+                When(status_ternak='Booked', then=Value(2)),
+                When(status_ternak='Sold Out', then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        ).order_by('status_order', '-created_at')
 
 
 class DagingPublicListView(generics.ListAPIView):
@@ -143,7 +152,14 @@ class DagingPublicListView(generics.ListAPIView):
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Daging.objects.filter(deleted_at__isnull=True, created_at__year=current_year).order_by('-created_at')
+        return Daging.objects.filter(deleted_at__isnull=True, created_at__year=current_year).annotate(
+            status_order=Case(
+                When(status_daging='Tersedia', then=Value(1)),
+                When(status_daging='Habis', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by('status_order', '-created_at')
 
 
         
