@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.db.models import Case, When, Value, IntegerField
 
 from accounts.permissions import IsMarketingOrSuperAdmin
 from .models import Ternak, Daging, Invest
@@ -24,6 +25,11 @@ class TernakInternalListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return Ternak.objects.filter(deleted_at__isnull=True).order_by('-created_at')
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -80,6 +86,11 @@ class DagingInternalListCreateView(generics.ListCreateAPIView):
         # Optimized: Added better ordering and ensuring lean queryset for list views
         return Daging.objects.filter(deleted_at__isnull=True).order_by('-created_at')
 
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
+
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return DagingCreateSerializer
@@ -132,7 +143,15 @@ class TernakPublicListView(generics.ListAPIView):
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Ternak.objects.filter(deleted_at__isnull=True, created_at__year=current_year).order_by('-created_at')
+        return Ternak.objects.filter(deleted_at__isnull=True, created_at__year=current_year).annotate(
+            status_order=Case(
+                When(status_ternak='Available', then=Value(1)),
+                When(status_ternak='Booked', then=Value(2)),
+                When(status_ternak='Sold Out', then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        ).order_by('status_order', '-created_at')
 
 
 class DagingPublicListView(generics.ListAPIView):
@@ -143,7 +162,14 @@ class DagingPublicListView(generics.ListAPIView):
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Daging.objects.filter(deleted_at__isnull=True, created_at__year=current_year).order_by('-created_at')
+        return Daging.objects.filter(deleted_at__isnull=True, created_at__year=current_year).annotate(
+            status_order=Case(
+                When(status_daging='Tersedia', then=Value(1)),
+                When(status_daging='Habis', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by('status_order', '-created_at')
 
 
         
@@ -162,6 +188,11 @@ class InvestInternalListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return Invest.objects.filter(deleted_at__isnull=True)
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
