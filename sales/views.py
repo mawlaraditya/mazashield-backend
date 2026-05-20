@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -94,6 +95,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
         id_customer = serializer.validated_data['id_customer']
         daftar_id_ternak = serializer.validated_data['daftar_id_ternak']
         catatan = serializer.validated_data.get('catatan', '')
+        ongkir = serializer.validated_data.get('ongkir', 0)
 
         # PBI-23: Jika customer tidak ditemukan → return 404 Not Found
         try:
@@ -115,7 +117,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 # Create a map for quick lookup and maintain order if needed
                 ternak_map = {t.id_ternak: t for t in ternaks_qs}
                 ternaks = []
-                total_tagihan = 0
+                total_tagihan = Decimal('0')
                 
                 for tid in daftar_id_ternak:
                     ternak = ternak_map.get(tid)
@@ -131,6 +133,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 pesanan = Pesanan.objects.create(
                     customer=customer,
                     catatan=catatan,
+                    ongkir=ongkir,
                     status_pesanan='Processed',
                     updated_at=timezone.now()
                 )
@@ -155,7 +158,7 @@ class OrderMazdafarmViewSet(viewsets.ModelViewSet):
                 # Create Pembayaran
                 Pembayaran.objects.create(
                     pesanan=pesanan,
-                    tagihan=total_tagihan,
+                    tagihan=total_tagihan + Decimal(str(ongkir)),
                     menunggu_persetujuan=0,
                     sudah_dibayar=0
                 )
@@ -284,6 +287,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
         id_customer = serializer.validated_data['id_customer']
         items_data = serializer.validated_data['items']
         catatan = serializer.validated_data.get('catatan', '')
+        ongkir = serializer.validated_data.get('ongkir', 0)
 
         try:
             customer = User.objects.get(id=id_customer)
@@ -304,10 +308,10 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 daging_map = {d.id_daging: d for d in dagings_qs}
                 
                 items_to_create = []
-                total_tagihan = 0
+                total_tagihan = Decimal('0')
                 for item_data in items_data:
                     id_daging = item_data['id_daging']
-                    berat_pesanan_kg = float(item_data['berat_pesanan_kg'])
+                    berat_pesanan_kg = Decimal(str(item_data['berat_pesanan_kg']))
                     daging = daging_map.get(id_daging)
                     
                     if not daging:
@@ -316,7 +320,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                     if daging.status_daging not in ['Tersedia', 'Pre Order']:
                         return Response({"detail": f"Daging {id_daging} tidak tersedia."}, status=status.HTTP_400_BAD_REQUEST)
                     
-                    subtotal = float(daging.harga_per_kg) * berat_pesanan_kg
+                    subtotal = daging.harga_per_kg * berat_pesanan_kg
                     items_to_create.append({
                         'daging': daging,
                         'berat': berat_pesanan_kg,
@@ -329,6 +333,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 pesanan = PesananDaging.objects.create(
                     customer=customer,
                     catatan=catatan,
+                    ongkir=ongkir,
                     status_pesanan='Processed',
                     updated_at=timezone.now()
                 )
@@ -352,7 +357,7 @@ class OrderMazdagingViewSet(viewsets.ModelViewSet):
                 # Create PembayaranDaging
                 PembayaranDaging.objects.create(
                     pesanan=pesanan,
-                    tagihan=total_tagihan,
+                    tagihan=total_tagihan + Decimal(str(ongkir)),
                     menunggu_persetujuan=0,
                     sudah_dibayar=0
                 )
@@ -1146,7 +1151,7 @@ class LaporanInvestasiCustomerView(APIView):
 
         if pesanan.status_pesanan == 'Cancelled':
             return Response({
-                "id_pesanan": pesanan.id,
+                "id_pesanan": pesanan.formatted_id_pesanan,
                 "status_pesanan": "Cancelled",
                 "detail": "Investasi ini telah dibatalkan. Tidak ada laporan hasil yang tersedia.",
             }, status=status.HTTP_200_OK)
@@ -1213,7 +1218,7 @@ class LaporanPenjualanView(APIView):
             for o in qs:
                 payment = getattr(o, payment_rel)
                 orders.append({
-                    'id_pesanan':           o.id,
+                    'id_pesanan':           o.formatted_id_pesanan,
                     'nama_customer':        o.customer.nama,
                     'jenis_layanan':        jenis,
                     # Untuk pesanan selesai, tagihan = 0, jadi total asli = sudah_dibayar + tagihan + menunggu_persetujuan
