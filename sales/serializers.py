@@ -32,16 +32,17 @@ class PesananSerializer(serializers.ModelSerializer):
     tagihan = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
     menunggu_persetujuan = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
     sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
-    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    id = serializers.IntegerField(read_only=True)
+    id_pesanan = serializers.CharField(source='formatted_id_pesanan', read_only=True)
 
     log_pembayaran = serializers.SerializerMethodField()
 
     class Meta:
         model = Pesanan
         fields = [
-            'id_pesanan', 'data_customer', 'daftar_ternak', 'total_item', 
+            'id', 'id_pesanan', 'data_customer', 'daftar_ternak', 'total_item', 
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar', 
-            'status_pesanan', 'catatan', 'created_at', 'updated_at', 'log_pembayaran'
+            'status_pesanan', 'catatan', 'ongkir', 'created_at', 'updated_at', 'log_pembayaran'
         ]
     
     def get_log_pembayaran(self, obj):
@@ -80,6 +81,7 @@ class OrderCreateSerializer(serializers.Serializer):
     id_customer = serializers.IntegerField()
     daftar_id_ternak = serializers.ListField(child=serializers.CharField())
     catatan = serializers.CharField(required=False, allow_blank=True)
+    ongkir = serializers.DecimalField(max_digits=15, decimal_places=2, required=False, default=0)
 
     def validate_id_customer(self, value):
         if not User.objects.filter(id=value).exists():
@@ -121,16 +123,17 @@ class PesananDagingSerializer(serializers.ModelSerializer):
     tagihan = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
     menunggu_persetujuan = serializers.DecimalField(source='pembayaran.menunggu_persetujuan', max_digits=15, decimal_places=2, read_only=True)
     sudah_dibayar = serializers.DecimalField(source='pembayaran.sudah_dibayar', max_digits=15, decimal_places=2, read_only=True)
-    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    id = serializers.IntegerField(read_only=True)
+    id_pesanan = serializers.CharField(source='formatted_id_pesanan', read_only=True)
 
     log_pembayaran = serializers.SerializerMethodField()
 
     class Meta:
         model = PesananDaging
         fields = [
-            'id_pesanan', 'data_customer', 'daftar_item', 'total_item', 
+            'id', 'id_pesanan', 'data_customer', 'daftar_item', 'total_item', 
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar', 
-            'status_pesanan', 'catatan', 'created_at', 'updated_at', 'log_pembayaran'
+            'status_pesanan', 'catatan', 'ongkir', 'created_at', 'updated_at', 'log_pembayaran'
         ]
     
     def get_log_pembayaran(self, obj):
@@ -172,6 +175,7 @@ class OrderDagingCreateSerializer(serializers.Serializer):
         min_length=1
     )
     catatan = serializers.CharField(required=False, allow_blank=True)
+    ongkir = serializers.DecimalField(max_digits=15, decimal_places=2, required=False, default=0)
 
     def validate_items(self, value):
         for item in value:
@@ -204,7 +208,8 @@ class OrderItemInvestSerializer(serializers.ModelSerializer):
 
 
 class PesananInvestSerializer(serializers.ModelSerializer):
-    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    id = serializers.IntegerField(read_only=True)
+    id_pesanan = serializers.CharField(source='formatted_id_pesanan', read_only=True)
     data_customer = serializers.SerializerMethodField()
     daftar_invest = OrderItemInvestSerializer(source='items', many=True, read_only=True)
     total_item = serializers.SerializerMethodField()
@@ -217,7 +222,7 @@ class PesananInvestSerializer(serializers.ModelSerializer):
     class Meta:
         model = PesananInvest
         fields = [
-            'id_pesanan', 'data_customer', 'daftar_invest', 'total_item',
+            'id', 'id_pesanan', 'data_customer', 'daftar_invest', 'total_item',
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar',
             'status_pesanan', 'catatan', 'created_at', 'updated_at', 'log_pembayaran'
         ]
@@ -331,7 +336,8 @@ class CustomerPesananMazdafarmSerializer(serializers.ModelSerializer):
     Hanya menampilkan data milik customer yang login.
     Tidak ada data internal (data_customer, log_pembayaran).
     """
-    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    id = serializers.IntegerField(read_only=True)
+    id_pesanan = serializers.CharField(source='formatted_id_pesanan', read_only=True)
     daftar_ternak = CustomerOrderItemMazdafarmSerializer(source='items', many=True, read_only=True)
     total_item = serializers.SerializerMethodField()
     tagihan = serializers.DecimalField(
@@ -347,7 +353,7 @@ class CustomerPesananMazdafarmSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pesanan
         fields = [
-            'id_pesanan', 'daftar_ternak', 'total_item',
+            'id', 'id_pesanan', 'daftar_ternak', 'total_item',
             'tagihan', 'menunggu_persetujuan', 'sudah_dibayar',
             'status_pesanan', 'created_at',
         ]
@@ -373,7 +379,8 @@ class CustomerPesananMazdagingSerializer(serializers.ModelSerializer):
     PBI-External-2: Serializer Read Order Mazdaging untuk Customer.
     Memuat kode_produk, berat_pesanan, total_harga, order_status, created_at.
     """
-    id_pesanan = serializers.IntegerField(source='id', read_only=True)
+    id = serializers.IntegerField(read_only=True)
+    id_pesanan = serializers.CharField(source='formatted_id_pesanan', read_only=True)
     daftar_item = CustomerOrderItemMazdagingSerializer(source='items', many=True, read_only=True)
     total_item = serializers.SerializerMethodField()
     total_harga = serializers.DecimalField(
@@ -390,7 +397,7 @@ class CustomerPesananMazdagingSerializer(serializers.ModelSerializer):
     class Meta:
         model = PesananDaging
         fields = [
-            'id_pesanan', 'daftar_item', 'total_item',
+            'id', 'id_pesanan', 'daftar_item', 'total_item',
             'total_harga', 'sudah_dibayar', 'menunggu_persetujuan',
             'order_status', 'created_at',
         ]
@@ -401,7 +408,7 @@ class CustomerPesananMazdagingSerializer(serializers.ModelSerializer):
 # ── PBI-39: Laporan Penjualan Serializer ──────────────────────────────────────
 class LaporanPenjualanItemSerializer(serializers.Serializer):
     """PBI-39: Single completed order row for sales report."""
-    id_pesanan       = serializers.IntegerField()
+    id_pesanan       = serializers.CharField()
     nama_customer    = serializers.CharField()
     jenis_layanan    = serializers.CharField()
     total_tagihan    = serializers.DecimalField(max_digits=15, decimal_places=2)
@@ -431,7 +438,7 @@ class OrderItemInvestExternalSerializer(serializers.ModelSerializer):
 
 class PesananInvestExternalSerializer(serializers.ModelSerializer):
     """PBI-34: Serializer pesanan invest untuk customer (read-only)."""
-    id_pesanan   = serializers.IntegerField(source='id', read_only=True)
+    id_pesanan   = serializers.CharField(source='formatted_id_pesanan', read_only=True)
     daftar_invest = OrderItemInvestExternalSerializer(source='items', many=True, read_only=True)
     total_item            = serializers.SerializerMethodField()
     tagihan               = serializers.DecimalField(source='pembayaran.tagihan', max_digits=15, decimal_places=2, read_only=True)
@@ -484,7 +491,7 @@ class PerhitunganAkhirSerializer(serializers.Serializer):
 
 class LaporanInvestasiSerializer(serializers.ModelSerializer):
     """Laporan investasi"""
-    id_pesanan     = serializers.IntegerField(source='pesanan.id', read_only=True)
+    id_pesanan     = serializers.CharField(source='pesanan.formatted_id_pesanan', read_only=True)
     status_pesanan = serializers.CharField(source='pesanan.status_pesanan', read_only=True)
     histori_berat  = HistoriBeratSerializer(many=True, read_only=True)
     harga_beli     = serializers.SerializerMethodField()

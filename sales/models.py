@@ -15,6 +15,7 @@ class Pesanan(models.Model):
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pesanan_customer')
     status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Processed')
     catatan = models.TextField(null=True, blank=True)
+    ongkir = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(null=True, blank=True)
@@ -28,7 +29,14 @@ class Pesanan(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Pesanan {self.id} - {self.customer.nama}"
+        return f"Pesanan {self.formatted_id_pesanan} - {self.customer.nama}"
+
+    @property
+    def formatted_id_pesanan(self):
+        urutan = f"{self.id + 100:04d}" if self.id else "0000"
+        bulan = f"{self.created_at.month:02d}" if self.created_at else "00"
+        tahun = f"{self.created_at.year}" if self.created_at else "0000"
+        return f"{urutan}/MZF/{bulan}/{tahun}"
 
 class OrderItem(models.Model):
     pesanan = models.ForeignKey(Pesanan, on_delete=models.CASCADE, related_name='items')
@@ -59,6 +67,7 @@ class PesananDaging(models.Model):
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pesanan_daging_customer')
     status_pesanan = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Processed')
     catatan = models.TextField(null=True, blank=True)
+    ongkir = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(null=True, blank=True)
@@ -72,7 +81,14 @@ class PesananDaging(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Pesanan Daging {self.id} - {self.customer.nama}"
+        return f"Pesanan Daging {self.formatted_id_pesanan} - {self.customer.nama}"
+
+    @property
+    def formatted_id_pesanan(self):
+        urutan = f"{self.id + 100:04d}" if self.id else "0000"
+        bulan = f"{self.created_at.month:02d}" if self.created_at else "00"
+        tahun = f"{self.created_at.year}" if self.created_at else "0000"
+        return f"{urutan}/SGR/{bulan}/{tahun}"
 
 class OrderItemDaging(models.Model):
     pesanan = models.ForeignKey(PesananDaging, on_delete=models.CASCADE, related_name='items')
@@ -118,7 +134,14 @@ class PesananInvest(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Pesanan Invest {self.id} - {self.customer.nama}"
+        return f"Pesanan Invest {self.formatted_id_pesanan} - {self.customer.nama}"
+
+    @property
+    def formatted_id_pesanan(self):
+        urutan = f"{self.id + 100:04d}" if self.id else "0000"
+        bulan = f"{self.created_at.month:02d}" if self.created_at else "00"
+        tahun = f"{self.created_at.year}" if self.created_at else "0000"
+        return f"{urutan}/INV/{bulan}/{tahun}"
 
 
 class OrderItemInvest(models.Model):
