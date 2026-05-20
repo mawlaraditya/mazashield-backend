@@ -1140,13 +1140,27 @@ class LaporanInvestasiCustomerView(APIView):
     permission_classes = [IsCustomer]
 
     def get(self, request, id_pesanan):
-        from .models import LaporanInvestasi
+        from .models import LaporanInvestasi, PesananInvest
         from .serializers import LaporanInvestasiSerializer
+        
+        # Coba cari berdasarkan ID (integer) atau formatted_id_pesanan
+        pesanan = None
         try:
+            # First try as integer PK
+            pk = int(id_pesanan)
             pesanan = PesananInvest.objects.select_related('pembayaran').get(
-                pk=id_pesanan, deleted_at__isnull=True, customer=request.user
+                pk=pk, deleted_at__isnull=True, customer=request.user
             )
-        except PesananInvest.DoesNotExist:
+        except (ValueError, PesananInvest.DoesNotExist):
+            # If not integer or not found by PK, try matching formatted_id_pesanan
+            # Filter first by customer then find match to handle MultipleObjectsReturned if needed
+            queryset = PesananInvest.objects.filter(customer=request.user, deleted_at__isnull=True)
+            for p in queryset:
+                if p.formatted_id_pesanan == id_pesanan:
+                    pesanan = p
+                    break
+
+        if not pesanan:
             return Response({"detail": "Pesanan tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
         if pesanan.status_pesanan == 'Cancelled':
