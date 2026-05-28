@@ -11,9 +11,9 @@ from accounts.permissions import IsMarketingOrSuperAdmin
 from .models import Ternak, Daging, Invest
 
 from .serializers import (
-    TernakCreateSerializer, TernakUpdateSerializer, TernakSerializer,
+    TernakCreateSerializer, TernakUpdateSerializer, TernakSerializer, TernakPublicSerializer,
     InvestCreateSerializer, InvestUpdateSerializer, InvestSerializer,
-    DagingCreateSerializer, DagingUpdateSerializer, DagingSerializer
+    DagingCreateSerializer, DagingUpdateSerializer, DagingSerializer, DagingPublicSerializer
 )
 from .filters import TernakFilter, DagingFilter, InvestFilter
 
@@ -128,7 +128,7 @@ class DagingInternalDetailView(APIView):
 class TernakPublicListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
-    serializer_class = TernakSerializer
+    serializer_class = TernakPublicSerializer
     filterset_class = TernakFilter
 
     def get_queryset(self):
@@ -147,7 +147,7 @@ class TernakPublicListView(generics.ListAPIView):
 class DagingPublicListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
-    serializer_class = DagingSerializer
+    serializer_class = DagingPublicSerializer
     filterset_class = DagingFilter
 
     def get_queryset(self):

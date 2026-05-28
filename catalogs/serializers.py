@@ -8,7 +8,7 @@ class TernakCreateSerializer(serializers.ModelSerializer):
         model = Ternak
         fields = [
             'id_ternak', 'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 
-            'berat_target', 'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
+            'berat_target', 'tanggal_lahir', 'harga', 'harga_modal', 'deskripsi', 'foto', 'status_ternak'
         ]
         read_only_fields = ['id_ternak']
 
@@ -37,7 +37,7 @@ class TernakUpdateSerializer(serializers.ModelSerializer):
         model = Ternak
         fields = [
             'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 'berat_target', 
-            'tanggal_lahir', 'harga', 'deskripsi', 'foto', 'status_ternak'
+            'tanggal_lahir', 'harga', 'harga_modal', 'deskripsi', 'foto', 'status_ternak'
         ]
 
     def validate_berat(self, value):
@@ -72,6 +72,17 @@ class TernakSerializer(serializers.ModelSerializer):
         model = Ternak
         fields = [
             'id', 'id_ternak', 'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 
+            'berat_target', 'tanggal_lahir', 'umur', 'harga', 'harga_modal', 'deskripsi', 
+            'foto', 'status_ternak', 'created_at', 'updated_at'
+        ]
+
+class TernakPublicSerializer(serializers.ModelSerializer):
+    umur = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Ternak
+        fields = [
+            'id', 'id_ternak', 'nama', 'jenis', 'kelas', 'berat', 'tanggal_penimbangan', 
             'berat_target', 'tanggal_lahir', 'umur', 'harga', 'deskripsi', 
             'foto', 'status_ternak', 'created_at', 'updated_at'
         ]
@@ -80,7 +91,7 @@ class TernakSerializer(serializers.ModelSerializer):
 class DagingCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Daging
-        fields = ['id_daging', 'nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging']
+        fields = ['id_daging', 'nama', 'bagian', 'harga_per_kg', 'harga_modal', 'deskripsi', 'foto', 'status_daging']
         read_only_fields = ['id_daging']
 
     def validate_harga_per_kg(self, value):
@@ -91,7 +102,7 @@ class DagingCreateSerializer(serializers.ModelSerializer):
 class DagingUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Daging
-        fields = ['nama', 'bagian', 'harga_per_kg', 'deskripsi', 'foto', 'status_daging']
+        fields = ['nama', 'bagian', 'harga_per_kg', 'harga_modal', 'deskripsi', 'foto', 'status_daging']
 
     def validate_harga_per_kg(self, value):
         if value <= 0:
@@ -99,6 +110,14 @@ class DagingUpdateSerializer(serializers.ModelSerializer):
         return value
     
 class DagingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Daging
+        fields = [
+            'id', 'id_daging', 'nama', 'bagian', 'harga_per_kg', 'harga_modal', 'deskripsi', 
+            'foto', 'status_daging', 'created_at', 'updated_at'
+        ]
+
+class DagingPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Daging
         fields = [

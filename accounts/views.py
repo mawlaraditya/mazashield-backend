@@ -61,6 +61,9 @@ class LoginView(APIView):
             'refresh': str(refresh),
             'role': user.role,
             'nama': user.nama,
+            'akses_mazdafarm': user.akses_mazdafarm,
+            'akses_mazdaging': user.akses_mazdaging,
+            'akses_investernak': user.akses_investernak,
         }, status=status.HTTP_200_OK)
     
 # ─── PBI-3: Logout ────────────────────────────────────────────────────────────
