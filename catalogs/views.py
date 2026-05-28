@@ -9,6 +9,7 @@ from django.db.models import Case, When, Value, IntegerField
 
 from accounts.permissions import IsMarketingOrSuperAdmin
 from .models import Ternak, Daging, Invest
+from .pagination import CatalogPagination
 
 from .serializers import (
     TernakCreateSerializer, TernakUpdateSerializer, TernakSerializer, TernakPublicSerializer,
@@ -16,6 +17,14 @@ from .serializers import (
     DagingCreateSerializer, DagingUpdateSerializer, DagingSerializer, DagingPublicSerializer
 )
 from .filters import TernakFilter, DagingFilter, InvestFilter
+
+# Mixin to add Cache-Control: public, max-age=60 on list responses
+class PublicCacheMixin:
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        if request.method == 'GET':
+            response['Cache-Control'] = 'public, max-age=60'
+        return response
 
 # Mazdafarm (Internal)
 class TernakInternalListCreateView(generics.ListCreateAPIView):
@@ -125,15 +134,23 @@ class DagingInternalDetailView(APIView):
         return Response({'message': 'Daging berhasil dihapus'}, status=status.HTTP_200_OK)
 
 # Public Views
-class TernakPublicListView(generics.ListAPIView):
+class TernakPublicListView(PublicCacheMixin, generics.ListAPIView):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     serializer_class = TernakPublicSerializer
     filterset_class = TernakFilter
+    pagination_class = CatalogPagination
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Ternak.objects.filter(deleted_at__isnull=True, created_at__year=current_year).annotate(
+        return Ternak.objects.filter(
+            deleted_at__isnull=True,
+            created_at__year=current_year
+        ).only(
+            'id', 'id_ternak', 'nama', 'jenis', 'kelas', 'berat',
+            'tanggal_penimbangan', 'berat_target', 'tanggal_lahir',
+            'harga', 'deskripsi', 'foto', 'status_ternak', 'created_at', 'updated_at'
+        ).annotate(
             status_order=Case(
                 When(status_ternak='Available', then=Value(1)),
                 When(status_ternak='Booked', then=Value(2)),
@@ -144,15 +161,22 @@ class TernakPublicListView(generics.ListAPIView):
         ).order_by('status_order', '-created_at')
 
 
-class DagingPublicListView(generics.ListAPIView):
+class DagingPublicListView(PublicCacheMixin, generics.ListAPIView):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     serializer_class = DagingPublicSerializer
     filterset_class = DagingFilter
+    pagination_class = CatalogPagination
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Daging.objects.filter(deleted_at__isnull=True, created_at__year=current_year).annotate(
+        return Daging.objects.filter(
+            deleted_at__isnull=True,
+            created_at__year=current_year
+        ).only(
+            'id', 'id_daging', 'nama', 'bagian', 'harga_per_kg',
+            'deskripsi', 'foto', 'status_daging', 'created_at', 'updated_at'
+        ).annotate(
             status_order=Case(
                 When(status_daging='Tersedia', then=Value(1)),
                 When(status_daging='Habis', then=Value(2)),
@@ -230,7 +254,7 @@ class InvestInternalDetailView(APIView):
         return Response({'message': 'Invest berhasil dihapus'}, status=status.HTTP_200_OK)
 
 
-class InvestPublicListView(generics.ListAPIView):
+class InvestPublicListView(PublicCacheMixin, generics.ListAPIView):
     """
     GET /api/invest  → Public catalog Invest Ternak
     Dapat diakses oleh semua user (AllowAny) - termasuk yang belum login
@@ -240,9 +264,19 @@ class InvestPublicListView(generics.ListAPIView):
     filter_backends = [DjangoFilterBackend]
     serializer_class = InvestSerializer
     filterset_class = InvestFilter
+    pagination_class = CatalogPagination
 
     def get_queryset(self):
         current_year = timezone.now().year
-        return Invest.objects.filter(deleted_at__isnull=True, created_at__year=current_year).order_by('-created_at')
+        return Invest.objects.filter(
+            deleted_at__isnull=True,
+            created_at__year=current_year
+        ).only(
+            'id', 'id_invest', 'nama_paket', 'harga_sapi', 'biaya_pemeliharaan',
+            'vaksin_vitamin', 'fee_marketing', 'total_modal', 'harga_jual',
+            'keuntungan', 'hasil_investor', 'roi_persen',
+            'jenis', 'berat', 'durasi_hari', 'deskripsi', 'foto', 'status_investernak',
+            'created_at', 'updated_at'
+        ).order_by('-created_at')
 
 
