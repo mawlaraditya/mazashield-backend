@@ -459,7 +459,7 @@ class HistoriBeratSerializer(serializers.ModelSerializer):
     """PBI-37/38: Histori berat mingguan."""
     class Meta:
         model = HistoriBerat
-        fields = ['id', 'tanggal_input', 'berat_kg', 'keterangan', 'estimasi_harga_jual', 'created_at']
+        fields = ['id', 'tanggal_input', 'berat_kg', 'harga_per_kg', 'keterangan', 'estimasi_harga_jual', 'created_at']
         read_only_fields = ['estimasi_harga_jual', 'created_at']
 
 
@@ -467,6 +467,7 @@ class HistoriBeratInputSerializer(serializers.Serializer):
     """PBI-37: Input berat mingguan (Marketing/SuperAdmin)."""
     tanggal_input = serializers.DateField()
     berat_kg      = serializers.DecimalField(max_digits=10, decimal_places=2)
+    harga_per_kg  = serializers.DecimalField(max_digits=15, decimal_places=2, required=False, default=0)
     keterangan    = serializers.CharField(required=False, allow_blank=True)
 
     def validate_berat_kg(self, value):
@@ -482,6 +483,7 @@ class PerhitunganAkhirSerializer(serializers.Serializer):
     biaya_operasional  = serializers.DecimalField(max_digits=15, decimal_places=2)
     biaya_obat_vitamin = serializers.DecimalField(max_digits=15, decimal_places=2)
     fee_marketing      = serializers.DecimalField(max_digits=15, decimal_places=2)
+    is_final           = serializers.BooleanField(required=False, default=False)
 
     def validate(self, data):
         for field in ['harga_jual_aktual', 'biaya_pakan', 'biaya_operasional', 'biaya_obat_vitamin', 'fee_marketing']:
@@ -507,7 +509,7 @@ class LaporanInvestasiSerializer(serializers.ModelSerializer):
             'harga_jual_aktual', 'biaya_pakan', 'biaya_operasional',
             'biaya_obat_vitamin', 'fee_marketing',
             'laba_kotor', 'total_biaya', 'laba_bersih', 'bagi_hasil_investor',
-            'created_at', 'updated_at',
+            'is_final', 'created_at', 'updated_at',
         ]
 
     def get_harga_beli(self, obj):

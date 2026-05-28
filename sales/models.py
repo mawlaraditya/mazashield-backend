@@ -234,6 +234,7 @@ class LaporanInvestasi(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_final   = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'laporan_investasi'
@@ -276,8 +277,8 @@ class HistoriBerat(models.Model):
     tanggal_input        = models.DateField()
     berat_kg             = models.DecimalField(max_digits=10, decimal_places=2)
     keterangan           = models.TextField(null=True, blank=True)
+    harga_per_kg         = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     estimasi_harga_jual  = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -286,9 +287,10 @@ class HistoriBerat(models.Model):
 
     def save(self, *args, **kwargs):
         from decimal import Decimal
-        # Auto-compute estimasi: berat_kg × harga_jual_per_kg (from parent laporan)
+        if not self.harga_per_kg:
+            self.harga_per_kg = self.laporan.harga_jual_per_kg
         self.estimasi_harga_jual = (
-            Decimal(str(self.berat_kg)) * Decimal(str(self.laporan.harga_jual_per_kg))
+            Decimal(str(self.berat_kg)) * Decimal(str(self.harga_per_kg))
         )
         super().save(*args, **kwargs)
 

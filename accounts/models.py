@@ -45,6 +45,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='Customer')
 
+    akses_mazdafarm = models.BooleanField(default=True)
+    akses_mazdaging = models.BooleanField(default=True)
+    akses_investernak = models.BooleanField(default=True)
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 

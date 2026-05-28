@@ -445,7 +445,7 @@ class OrderInvestViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSuperAdminOrMarketing]
     pagination_class = OrderPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ['status_pesanan']
+    filterset_fields = ['status_pesanan', 'customer']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
 
@@ -1095,6 +1095,7 @@ class LaporanInvestasiBeratView(APIView):
             laporan=laporan,
             tanggal_input=serializer.validated_data['tanggal_input'],
             berat_kg=serializer.validated_data['berat_kg'],
+            harga_per_kg=serializer.validated_data.get('harga_per_kg', 0),
             keterangan=serializer.validated_data.get('keterangan', ''),
         )
         return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
@@ -1123,8 +1124,12 @@ class LaporanInvestasiAkhirView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         laporan, _ = LaporanInvestasi.objects.get_or_create(pesanan=pesanan)
+        if laporan.is_final:
+            return Response({"detail": "Laporan hasil investasi ini telah difinalisasi dan tidak dapat diubah kembali."}, status=status.HTTP_400_BAD_REQUEST)
+
         for field in ['harga_jual_aktual', 'biaya_pakan', 'biaya_operasional', 'biaya_obat_vitamin', 'fee_marketing']:
             setattr(laporan, field, serializer.validated_data[field])
+        laporan.is_final = serializer.validated_data.get('is_final', False)
         laporan.hitung_akhir()
         laporan.save()
         return Response(LaporanInvestasiSerializer(laporan).data, status=status.HTTP_200_OK)
@@ -1206,7 +1211,7 @@ class OrderInvestExternalView(APIView):
 class LaporanPenjualanView(APIView):
     """
     PBI-39: GET /api/sales/laporan-penjualan/
-    Returns all completed orders (status = Selesai) across all 3 order types.
+    Returns all completed orders mapped to individual products across all 3 services.
     Supports filters: start_date, end_date, jenis_layanan.
     Returns rekapitulasi: total_transaksi, total_customer_unik, total_pendapatan.
     Supports pagination via ?page=&limit= query params.
@@ -1222,32 +1227,79 @@ class LaporanPenjualanView(APIView):
 
         orders = []
 
-        def _add_orders(model, payment_rel, jenis, label):
-            qs = model.objects.filter(status_pesanan='Completed', deleted_at__isnull=True)
+        # 1. Mazdafarm
+        if not jenis_layanan or jenis_layanan == 'Mazdafarm':
+            qs = Pesanan.objects.filter(status_pesanan='Completed', deleted_at__isnull=True)
             if start_date:
                 qs = qs.filter(created_at__date__gte=start_date)
             if end_date:
                 qs = qs.filter(created_at__date__lte=end_date)
-            qs = qs.select_related('customer', payment_rel)
+            qs = qs.select_related('customer', 'pembayaran').prefetch_related('items__ternak')
             for o in qs:
-                payment = getattr(o, payment_rel)
-                orders.append({
-                    'id_pesanan':           o.formatted_id_pesanan,
-                    'nama_customer':        o.customer.nama,
-                    'jenis_layanan':        jenis,
-                    # Untuk pesanan selesai, tagihan = 0, jadi total asli = sudah_dibayar + tagihan + menunggu_persetujuan
-                    'total_tagihan':        float(payment.sudah_dibayar) + float(payment.tagihan) + float(payment.menunggu_persetujuan),
-                    'sudah_dibayar':        float(payment.sudah_dibayar),
-                    'menunggu_persetujuan': float(payment.menunggu_persetujuan),
-                    'tanggal_transaksi':    o.created_at,
-                })
+                for item in o.items.all():
+                    orders.append({
+                        'id_pesanan':           o.formatted_id_pesanan,
+                        'nama_customer':        o.customer.nama,
+                        'jenis_layanan':        'Mazdafarm',
+                        'produk_id':            item.ternak.id_ternak,
+                        'nama_produk':          item.ternak.nama,
+                        'detail_layanan':       f"Kelas {item.ternak.kelas or '-'}, {item.ternak.jenis}",
+                        'modal_awal':           float(item.ternak.harga_modal),
+                        'total_tagihan':        float(item.harga),
+                        'sudah_dibayar':        float(item.harga),
+                        'menunggu_persetujuan': 0.0,
+                        'tanggal_transaksi':    o.created_at,
+                    })
 
-        if not jenis_layanan or jenis_layanan == 'Mazdafarm':
-            _add_orders(Pesanan,       'pembayaran', 'Mazdafarm',   'Pesanan Ternak')
+        # 2. Mazdaging
         if not jenis_layanan or jenis_layanan == 'Mazdaging':
-            _add_orders(PesananDaging, 'pembayaran', 'Mazdaging',   'Pesanan Daging')
+            qs = PesananDaging.objects.filter(status_pesanan='Completed', deleted_at__isnull=True)
+            if start_date:
+                qs = qs.filter(created_at__date__gte=start_date)
+            if end_date:
+                qs = qs.filter(created_at__date__lte=end_date)
+            qs = qs.select_related('customer', 'pembayaran').prefetch_related('items__daging')
+            for o in qs:
+                for item in o.items.all():
+                    qty = float(item.berat_pesanan_kg)
+                    modal_price = float(item.daging.harga_modal)
+                    orders.append({
+                        'id_pesanan':           o.formatted_id_pesanan,
+                        'nama_customer':        o.customer.nama,
+                        'jenis_layanan':        'Mazdaging',
+                        'produk_id':            item.daging.id_daging,
+                        'nama_produk':          item.daging.nama,
+                        'detail_layanan':       f"{item.daging.bagian}, {qty} kg",
+                        'modal_awal':           modal_price * qty,
+                        'total_tagihan':        float(item.subtotal_item),
+                        'sudah_dibayar':        float(item.subtotal_item),
+                        'menunggu_persetujuan': 0.0,
+                        'tanggal_transaksi':    o.created_at,
+                    })
+
+        # 3. Investernak
         if not jenis_layanan or jenis_layanan == 'Investernak':
-            _add_orders(PesananInvest, 'pembayaran', 'Investernak', 'Pesanan Invest Ternak')
+            qs = PesananInvest.objects.filter(status_pesanan='Completed', deleted_at__isnull=True)
+            if start_date:
+                qs = qs.filter(created_at__date__gte=start_date)
+            if end_date:
+                qs = qs.filter(created_at__date__lte=end_date)
+            qs = qs.select_related('customer', 'pembayaran').prefetch_related('items__invest')
+            for o in qs:
+                for item in o.items.all():
+                    orders.append({
+                        'id_pesanan':           o.formatted_id_pesanan,
+                        'nama_customer':        o.customer.nama,
+                        'jenis_layanan':        'Investernak',
+                        'produk_id':            item.invest.id_invest,
+                        'nama_produk':          item.invest.nama_paket,
+                        'detail_layanan':       f"ROI {item.invest.roi_persen}%, {item.invest.durasi_hari} hari",
+                        'modal_awal':           float(item.invest.total_modal),
+                        'total_tagihan':        float(item.harga_sapi),
+                        'sudah_dibayar':        float(item.harga_sapi),
+                        'menunggu_persetujuan': 0.0,
+                        'tanggal_transaksi':    o.created_at,
+                    })
 
         # Sort by date descending
         orders.sort(key=lambda x: x['tanggal_transaksi'], reverse=True)

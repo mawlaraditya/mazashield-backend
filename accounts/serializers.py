@@ -61,7 +61,7 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['nama', 'nomor_telepon', 'email', 'role', 'generated_password']
+        fields = ['nama', 'nomor_telepon', 'email', 'role', 'generated_password', 'akses_mazdafarm', 'akses_mazdaging', 'akses_investernak']
 
     def validate_role(self, value):
         request_user = self.context.get('request').user
@@ -87,8 +87,15 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Generate random password
         random_pwd = get_random_string(length=12)
+        akses_mazdafarm = validated_data.pop('akses_mazdafarm', True)
+        akses_mazdaging = validated_data.pop('akses_mazdaging', True)
+        akses_investernak = validated_data.pop('akses_investernak', True)
         validated_data['password'] = random_pwd
         user = User.objects.create_user(**validated_data)
+        user.akses_mazdafarm = akses_mazdafarm
+        user.akses_mazdaging = akses_mazdaging
+        user.akses_investernak = akses_investernak
+        user.save()
         # Store for display in response
         user.generated_password = random_pwd
         return user
@@ -168,7 +175,7 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['nama', 'nomor_telepon', 'email', 'role', 'generated_password']
+        fields = ['nama', 'nomor_telepon', 'email', 'role', 'generated_password', 'akses_mazdafarm', 'akses_mazdaging', 'akses_investernak']
 
     def validate_role(self, value):
         request_user = self.context.get('request').user
@@ -202,8 +209,15 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Generate random password
         random_pwd = get_random_string(length=12)
+        akses_mazdafarm = validated_data.pop('akses_mazdafarm', True)
+        akses_mazdaging = validated_data.pop('akses_mazdaging', True)
+        akses_investernak = validated_data.pop('akses_investernak', True)
         validated_data['password'] = random_pwd
         user = User.objects.create_user(**validated_data)
+        user.akses_mazdafarm = akses_mazdafarm
+        user.akses_mazdaging = akses_mazdaging
+        user.akses_investernak = akses_investernak
+        user.save()
         # Store for display in response
         user.generated_password = random_pwd
         return user
@@ -259,14 +273,14 @@ class ChangePasswordSerializer(serializers.Serializer):
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'nama', 'nomor_telepon', 'email', 'role', 'is_active', 'created_at']
+        fields = ['id', 'nama', 'nomor_telepon', 'email', 'role', 'is_active', 'created_at', 'akses_mazdafarm', 'akses_mazdaging', 'akses_investernak']
 
 
 # ─── Admin Edit User (for admin) ──────────────────────────────────────────────
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['nama', 'nomor_telepon', 'role', 'is_active']
+        fields = ['nama', 'nomor_telepon', 'role', 'is_active', 'akses_mazdafarm', 'akses_mazdaging', 'akses_investernak']
 
     def validate_nomor_telepon(self, value):
         import re
@@ -290,6 +304,9 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
         instance.nomor_telepon = validated_data.get('nomor_telepon', instance.nomor_telepon)
         instance.role = validated_data.get('role', instance.role)
         instance.is_active = new_active_status
+        instance.akses_mazdafarm = validated_data.get('akses_mazdafarm', instance.akses_mazdafarm)
+        instance.akses_mazdaging = validated_data.get('akses_mazdaging', instance.akses_mazdaging)
+        instance.akses_investernak = validated_data.get('akses_investernak', instance.akses_investernak)
         instance.updated_at = timezone.now()
         instance.save()
         return instance
