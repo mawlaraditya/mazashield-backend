@@ -6,6 +6,8 @@ from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Case, When, Value, IntegerField
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 
 from accounts.permissions import IsMarketingOrSuperAdmin
 from .models import Ternak, Daging, Invest
@@ -27,6 +29,7 @@ class PublicCacheMixin:
         return response
 
 # Mazdafarm (Internal)
+@method_decorator(cache_page(60 * 15), name='get')
 class TernakInternalListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsMarketingOrSuperAdmin]
     filter_backends = [DjangoFilterBackend]
@@ -81,6 +84,7 @@ class TernakInternalDetailView(APIView):
         return Response({'message': 'Ternak berhasil dihapus'}, status=status.HTTP_200_OK)
 
 # Mazdaging (Internal)
+@method_decorator(cache_page(60 * 15), name='get')
 class DagingInternalListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsMarketingOrSuperAdmin]
     filter_backends = [DjangoFilterBackend]
@@ -134,6 +138,7 @@ class DagingInternalDetailView(APIView):
         return Response({'message': 'Daging berhasil dihapus'}, status=status.HTTP_200_OK)
 
 # Public Views
+@method_decorator(cache_page(60 * 15), name='get')
 class TernakPublicListView(PublicCacheMixin, generics.ListAPIView):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
@@ -161,6 +166,7 @@ class TernakPublicListView(PublicCacheMixin, generics.ListAPIView):
         ).order_by('status_order', '-created_at')
 
 
+@method_decorator(cache_page(60 * 15), name='get')
 class DagingPublicListView(PublicCacheMixin, generics.ListAPIView):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
@@ -191,6 +197,7 @@ class DagingPublicListView(PublicCacheMixin, generics.ListAPIView):
 #  INVEST TERNAK — Internal (PBI Invest)
 # ══════════════════════════════════════════════════════════════════
 
+@method_decorator(cache_page(60 * 15), name='get')
 class InvestInternalListCreateView(generics.ListCreateAPIView):
     """
     PBI-18 POST   /api/sales/invest  → Create Katalog Invest Ternak
@@ -254,6 +261,7 @@ class InvestInternalDetailView(APIView):
         return Response({'message': 'Invest berhasil dihapus'}, status=status.HTTP_200_OK)
 
 
+@method_decorator(cache_page(60 * 15), name='get')
 class InvestPublicListView(PublicCacheMixin, generics.ListAPIView):
     """
     GET /api/invest  → Public catalog Invest Ternak
