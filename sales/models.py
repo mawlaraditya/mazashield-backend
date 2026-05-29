@@ -170,7 +170,7 @@ class RiwayatPembayaran(models.Model):
     ]
 
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField(db_index=True)
+    object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey('content_type', 'object_id')
 
     nominal_pembayaran = models.DecimalField(max_digits=15, decimal_places=2)
@@ -210,7 +210,6 @@ class LaporanInvestasi(models.Model):
         PesananInvest,
         on_delete=models.CASCADE,
         related_name='laporan',
-        db_index=True,
     )
 
     # Harga jual per kg yang digunakan untuk estimasi (diinput oleh Marketing)

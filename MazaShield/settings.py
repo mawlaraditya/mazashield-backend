@@ -110,7 +110,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'MazaShield.wsgi.application'
 
 # =====================
-# DATABASE
+# DATABASE & CACHING
 # =====================
 DATABASES = {
     "default": dj_database_url.config(
@@ -118,6 +118,13 @@ DATABASES = {
         conn_max_age=600,
         ssl_require=True
     )
+}
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'mazashield-cache',
+    }
 }
 
 # =====================
